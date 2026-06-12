@@ -1,3 +1,13 @@
+## Deferred from: code review of 1-5-기본-레이아웃-다락-브랜드-적용 (2026-06-12)
+
+- D1: CDN 폰트(Pretendard) SRI/CSP 없음 — jsdelivr subresource integrity 미적용; 운영 전 self-host 또는 `<link integrity="...">` 적용 필요
+- D2: `--border` (shadcn) vs `dalock.border` (#E2E8F0) 색상 불일치 — shadcn 기반 컴포넌트에서 미세한 브랜드 색상 차이
+- D3: CDN 폰트 preconnect/font-display 없음 — FOUT 위험; 운영 전 `<link rel="preconnect">` + `font-display=swap` 추가
+- D4: Primary 버튼 UI 요소 부재(AC2 partial) — Story 2에서 실제 CTA 버튼 추가 시 자동 충족
+- D5: `dvh` 완전 지원 — `min-h-[calc(100dvh-56px)]` 사용으로 모바일 브라우저 chrome 처리 개선 필요; Story 2에서 실제 레이아웃 구현 시 처리
+- D6: CSP/보안 헤더 없음 — `next.config.mjs`의 `headers()`에 Content-Security-Policy 추가; 별도 보안 스토리에서 처리
+- D7: `middleware.ts` — `SECRET_KEY` undefined 시 literal "undefined" 인코딩됨; 명시적 throw 가드 추가 필요
+
 ## Deferred from: code review of 1-4-jwt-인증-로그인-페이지 (2026-06-12)
 
 - F7: `secure=False` 하드코딩 [auth.py] — POC 단계; Railway 배포 시 `secure=True`로 변경 필요

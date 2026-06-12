@@ -13,12 +13,25 @@ module.exports = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Pretendard", "system-ui", "sans-serif"],
+      },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
       colors: {
+        dalock: {
+          primary: "#2563EB",
+          success: "#16A34A",
+          warning: "#D97706",
+          danger: "#DC2626",
+          surface: "#F8FAFC",
+          border: "#E2E8F0",
+          text1: "#0F172A",
+          text2: "#64748B",
+        },
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
         card: {
