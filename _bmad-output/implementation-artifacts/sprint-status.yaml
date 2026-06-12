@@ -55,7 +55,7 @@ development_status:
   epic-2: in-progress
   2-1-입지-조건-입력-폼: done
   2-2-수익-시뮬레이션-연산-api: done
-  2-3-시뮬레이션-결과-화면-표시: in-progress
+  2-3-시뮬레이션-결과-화면-표시: done
   epic-2-retrospective: optional
 
   # ─── Epic 3: 지도 시각화 & 제안서 PDF 출력 ───────────────────────
