@@ -1,6 +1,15 @@
+## Deferred from: code review of 2-2-수익-시뮬레이션-연산-api (2026-06-12)
+
+- F2: `secure=False` 쿠키 — Railway 배포 시 `secure=True` 필요 (Story 1-4 F7과 동일)
+- F4/E9: LIKE 와일드카드 미이스케이프 (`_`, `%`) — `\w+구/시` 정규식으로 특수문자 유입 위험 낮음; 운영 전 `escape="\\"` 추가 권장
+- F7: `net_profit` 음수 허용 — 논리적으로 유효한 값(손실 상황); 프론트엔드 표시 시 "손실" 레이블 처리 필요
+- F9: Server Action → FastAPI 서버간 JWT Cookie 헤더 전달 — 내부 네트워크 TLS 확인 필요; `API_URL` 반드시 HTTPS 사용
+- E5: `area_sqm` 최소값 미지정 (`gt=0` 허용) — 1.0 미만 면적은 계산 의미 없음; 운영 전 `ge=1.0` 추가 권장
+- E10: 백분위 계산 시 예측 지점 자신이 비교 풀에 포함 — 미미한 통계적 편향; 데이터 충분시 미미한 영향
+
 ## Deferred from: code review of 2-1-입지-조건-입력-폼 (2026-06-12)
 
-- Server Action `runSimulation` 인증 가드 없음 — Story 2-2에서 실제 API 연결 시 `getServerSession()` 추가 필요 (SSRF 방지)
+- ~~Server Action `runSimulation` 인증 가드 없음~~ — Story 2-2에서 `cookies()` + Cookie 헤더 전달로 해소
 - `z.coerce.number()` + NaN → `invalid_type_error` 메시지 Zod 버전 의존 — Zod 3.22+ 확인 필요, 필요 시 `.refine(!isNaN)` 추가
 - buildingUse Select deselect 옵션 없음 — 선택 후 "미선택"으로 되돌리기 불가; UX 개선 여지
 - EV충전 checkbox(시각적) vs toggle-switch(UX 스펙) — 기능은 동일, 시각적 개선은 shadcn Switch 설치 후 교체 가능

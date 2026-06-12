@@ -1,6 +1,6 @@
 # Story 2.2: 수익 시뮬레이션 연산 API
 
-Status: review
+Status: done
 
 ## Story
 
@@ -227,3 +227,4 @@ Story 4.2 이전에는 branches 테이블이 비어 있어 Tier 3에서도 0개 
 
 - 2026-06-12: Story 2-2 CS 생성. POST /simulation/run, FR-2 가중 유사도 알고리즘, EV 보정, 3단계 fallback, verdict 판정 스코프 정의.
 - 2026-06-12: Story 2-2 DS 구현 완료. Literal verdict, DB 파라미터 ABC 업데이트, RuleBasedEngine 전체 구현, simulation 라우터, 프론트엔드 API 연결. 12/12 pytest 통과, tsc 오류 없음.
+- 2026-06-12: 코드 리뷰 패치 8건 적용. JWT exp/sub require, 엔진 singleton, fallback_used Tier3만 True, occupancy_rate 공식 수정, percentile strict-<, gu/si 빈값 가드, 광역시 정규화, zero-revenue guard. 12/12 재통과.

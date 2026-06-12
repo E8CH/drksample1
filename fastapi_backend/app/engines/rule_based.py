@@ -12,6 +12,11 @@ from app.schemas.simulation import LocationConditions, SimulationResult
 
 FALLBACK_THRESHOLD = 5
 EV_CORRECTION = 1.08
+# Tier 3 (all-branch) and percentile queries are capped to prevent full-table scan DoS.
+BRANCH_QUERY_LIMIT = 500
+
+# Normalize metropolitan/special city designations for consistent address matching.
+_METRO_RE = re.compile(r"(광역|특별자치|특별)시")
 
 
 class _BranchMetrics(NamedTuple):
@@ -29,11 +34,14 @@ def extract_gu(address: str) -> str:
 
 
 def extract_si(address: str) -> str:
-    m = re.search(r"\w+시", address)
+    # Normalize metropolitan designations so "인천광역시" → "인천시" for LIKE matching.
+    normalized = _METRO_RE.sub("시", address)
+    m = re.search(r"\w+시", normalized)
     return m.group(0) if m else ""
 
 
 def _calc_verdict(percentile: float) -> Literal["추천", "검토필요", "비추천"]:
+    # top 30% (≥70th pctile) → 추천, middle 30% → 검토필요, bottom 40% → 비추천
     if percentile >= 70.0:
         return "추천"
     if percentile >= 40.0:
@@ -63,7 +71,6 @@ async def _fetch_metrics(db: AsyncSession, branch_names: list[str]) -> list[_Bra
     if not branch_names:
         return []
 
-    # avg monthly revenue per branch from Sales
     monthly_rev_sq = (
         select(
             Sales.branch_name,
@@ -84,7 +91,6 @@ async def _fetch_metrics(db: AsyncSession, branch_names: list[str]) -> list[_Bra
         .subquery()
     )
 
-    # avg monthly ops cost per branch from Operations
     avg_ops_sq = (
         select(
             Operation.branch_name,
@@ -132,6 +138,7 @@ def _weighted_average(metrics: list[_BranchMetrics], gu: str, location: Location
     for m in metrics:
         area_sim = max(0.0, 1.0 - abs(m.area_sqm - location.area_sqm) / max(location.area_sqm, 1.0))
         rent_sim = max(0.0, 1.0 - abs(m.monthly_rent - location.monthly_rent) / max(location.monthly_rent, 1.0))
+        # `gu and` guard prevents empty-string matching every address ("" in any_str is True)
         region_sim = 1.0 if gu and gu in m.address else 0.0
         weight = 0.45 * area_sim + 0.30 * rent_sim + 0.25 * region_sim
         pairs.append((m, max(weight, 1e-9)))
@@ -169,21 +176,27 @@ class RuleBasedEngine(SimulationEngine):
         rent_min1 = location.monthly_rent * 0.7
         rent_max1 = location.monthly_rent * 1.3
 
-        # Tier 1: ±30%, same 구
-        raw = await _query_branches(db, area_min1, area_max1, rent_min1, rent_max1, gu)
+        # Tier 1: ±30%, same 구 (skip if no 구 in address to avoid nationwide query)
+        if gu:
+            raw = await _query_branches(db, area_min1, area_max1, rent_min1, rent_max1, gu)
+        else:
+            raw = []
 
+        # Tier 2: ±50%, same 시 — geographic expansion, not a data-quality fallback.
+        # Does NOT set fallback_used; city-level similarity is still a valid geographic match.
         if len(raw) < FALLBACK_THRESHOLD:
-            # Tier 2: ±50%, same 시
             area_min2 = location.area_sqm * 0.5
             area_max2 = location.area_sqm * 1.5
             rent_min2 = location.monthly_rent * 0.5
             rent_max2 = location.monthly_rent * 1.5
-            raw = await _query_branches(db, area_min2, area_max2, rent_min2, rent_max2, si)
-            fallback_used = True
+            if si:
+                raw = await _query_branches(db, area_min2, area_max2, rent_min2, rent_max2, si)
+            else:
+                raw = []
 
+        # Tier 3: all branches — true data-quality fallback, triggers warning banner.
         if len(raw) < FALLBACK_THRESHOLD:
-            # Tier 3: all branches
-            result = await db.execute(select(Branch))
+            result = await db.execute(select(Branch).limit(BRANCH_QUERY_LIMIT))
             raw = list(result.scalars().all())
             fallback_used = True
 
@@ -193,7 +206,6 @@ class RuleBasedEngine(SimulationEngine):
         branch_names = [b.branch_name for b in raw]
         metrics = await _fetch_metrics(db, branch_names)
 
-        # Use only branches with any revenue data; fall back to all if none have data
         with_revenue = [m for m in metrics if m.avg_monthly_revenue > 0]
         effective = with_revenue if with_revenue else metrics
         if not effective:
@@ -201,11 +213,19 @@ class RuleBasedEngine(SimulationEngine):
 
         weighted_rev, weighted_ops, _ = _weighted_average(effective, gu, location)
 
+        # Guard against zero/negative revenue (all branches have no sales data)
+        if weighted_rev <= 0:
+            return _default_estimate(location)
+
         if location.ev_charging:
             weighted_rev *= EV_CORRECTION
 
-        occupancy_rate = min(99.0, max(0.0, weighted_rev / max(location.area_sqm * 10_000.0, 1.0) * 100.0))
+        # Occupancy rate: fraction of theoretical max revenue (2× monthly rent = full occupancy).
+        # At revenue = 2×rent → ~100% (capped at 99); revenue = 1×rent → ~50%.
+        occupancy_rate = min(99.0, max(0.0, weighted_rev / max(location.monthly_rent * 2.0, 1.0) * 100.0))
 
+        # Net profit: revenue minus all monthly costs for this location.
+        # weighted_ops covers peer branches' electricity + operating costs (not rent, which is separate).
         net_profit = (
             weighted_rev
             - location.monthly_rent
@@ -213,14 +233,15 @@ class RuleBasedEngine(SimulationEngine):
             - weighted_ops
         )
 
-        # Percentile: compare against all branches' avg monthly revenue
-        all_names_res = await db.execute(select(Branch.branch_name))
+        # Percentile: fraction of all branches with revenue strictly below predicted value.
+        # Using strict < (not <=) gives the standard "percent of population below" definition.
+        all_names_res = await db.execute(select(Branch.branch_name).limit(BRANCH_QUERY_LIMIT))
         all_names = list(all_names_res.scalars().all())
         all_metrics = await _fetch_metrics(db, all_names)
         all_revenues = [m.avg_monthly_revenue for m in all_metrics if m.avg_monthly_revenue > 0]
 
         if all_revenues:
-            rank = sum(1 for r in all_revenues if r <= weighted_rev)
+            rank = sum(1 for r in all_revenues if r < weighted_rev)
             percentile = rank / len(all_revenues) * 100.0
         else:
             percentile = 50.0
