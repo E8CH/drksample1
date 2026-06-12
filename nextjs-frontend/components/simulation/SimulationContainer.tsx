@@ -1,10 +1,16 @@
 "use client";
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { type SimulationResultData, type MapPinsData, type BranchPinData } from "@/lib/definitions";
+import {
+  type SimulationResultData,
+  type MapPinsData,
+  type BranchPinData,
+  type SimulationInput,
+} from "@/lib/definitions";
 import { fetchMapPins } from "@/components/actions/map-action";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
+import ProposalModal from "@/components/proposal/ProposalModal";
 
 const KakaoMapView = dynamic(
   () => import("@/components/map/KakaoMapView"),
@@ -23,6 +29,8 @@ type MapRequest = { address: string; seq: number };
 export default function SimulationContainer() {
   const [result, setResult] = useState<SimulationResultData | null>(null);
   const [resultVersion, setResultVersion] = useState(0);
+  const [submittedInput, setSubmittedInput] = useState<SimulationInput | null>(null);
+  const [proposalOpen, setProposalOpen] = useState(false);
 
   // Map fetch state — seq counter prevents same-address re-submit skip
   const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
@@ -53,11 +61,12 @@ export default function SimulationContainer() {
     };
   }, [mapRequest]);
 
-  function handleResult(r: SimulationResultData, address: string) {
+  function handleResult(r: SimulationResultData, input: SimulationInput) {
     setResult(r);
+    setSubmittedInput(input);
     setResultVersion((v) => v + 1);
     // seq always increments → same-address re-submit still triggers new fetch
-    setMapRequest((prev) => ({ address, seq: (prev?.seq ?? 0) + 1 }));
+    setMapRequest((prev) => ({ address: input.address, seq: (prev?.seq ?? 0) + 1 }));
   }
 
   const showMap = !mapLoading && mapRequest !== null;
@@ -95,10 +104,24 @@ export default function SimulationContainer() {
         {/* Result card overlay — fixed size with mobile-safe max-w */}
         {result && (
           <div className="absolute bottom-4 right-4 w-72 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl shadow-xl bg-white">
-            <SimulationResultCard key={resultVersion} result={result} />
+            <SimulationResultCard
+              key={resultVersion}
+              result={result}
+              onProposalClick={() => setProposalOpen(true)}
+            />
           </div>
         )}
       </div>
+
+      {/* Proposal modal */}
+      {proposalOpen && result && submittedInput && (
+        <ProposalModal
+          open={proposalOpen}
+          onClose={() => setProposalOpen(false)}
+          result={result}
+          input={submittedInput}
+        />
+      )}
     </div>
   );
 }

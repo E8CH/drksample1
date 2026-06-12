@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { simulationInputSchema, type SimulationResultData } from "@/lib/definitions";
+import { simulationInputSchema, type SimulationResultData, type SimulationInput } from "@/lib/definitions";
 import { runSimulation } from "@/components/actions/simulation-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,7 +57,7 @@ function inputClass(error?: string) {
 }
 
 type Props = {
-  onResult?: (result: SimulationResultData, address: string) => void;
+  onResult?: (result: SimulationResultData, input: SimulationInput) => void;
 };
 
 export default function SimulationForm({ onResult }: Props) {
@@ -125,7 +125,7 @@ export default function SimulationForm({ onResult }: Props) {
         if (res.error) {
           setServerError(res.error);
         } else if (res.result) {
-          onResult?.(res.result, parsed.data.address);
+          onResult?.(res.result, parsed.data);
         } else {
           setServerError("알 수 없는 오류가 발생했습니다");
         }

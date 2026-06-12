@@ -81,7 +81,6 @@ export default function SimulationResultCard({ result, onProposalClick }: Props)
       <button
         type="button"
         onClick={onProposalClick}
-        title="제안서 출력 기능은 곧 추가됩니다"
         className="mt-auto w-full flex items-center justify-center rounded-md bg-dalock-primary text-white text-sm font-medium px-4 py-2.5 hover:bg-blue-700 transition-colors"
       >
         제안서 출력

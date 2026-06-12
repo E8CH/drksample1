@@ -13,6 +13,11 @@ class LocationConditions(BaseModel):
     parking_count: int = Field(default=0, ge=0)
 
 
+class ComparisonEntry(BaseModel):
+    name: str
+    monthly_revenue: float
+
+
 class SimulationResult(BaseModel):
     estimated_monthly_revenue: float
     occupancy_rate: float
@@ -21,3 +26,4 @@ class SimulationResult(BaseModel):
     verdict: Literal["추천", "검토필요", "비추천"]
     similar_branch_count: int
     fallback_used: bool = False
+    comparison_data: list[ComparisonEntry] = []

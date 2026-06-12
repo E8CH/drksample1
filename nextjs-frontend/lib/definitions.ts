@@ -54,6 +54,11 @@ export const simulationInputSchema = z.object({
 
 export type SimulationInput = z.infer<typeof simulationInputSchema>;
 
+export type ComparisonEntry = {
+  name: string;
+  monthly_revenue: number;
+};
+
 export type SimulationResultData = {
   estimated_monthly_revenue: number;
   occupancy_rate: number;
@@ -62,6 +67,7 @@ export type SimulationResultData = {
   verdict: "추천" | "검토필요" | "비추천";
   similar_branch_count: number;
   fallback_used: boolean;
+  comparison_data: ComparisonEntry[];
 };
 
 export type BranchPinData = {

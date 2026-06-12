@@ -49,5 +49,9 @@ export async function runSimulation(input: SimulationInput): Promise<SimulationA
   if (!data?.verdict || !VALID_VERDICTS.includes(data.verdict)) {
     return { error: "서버 응답 형식 오류가 발생했습니다" };
   }
+  // Normalize comparison_data: always an array even if backend omits it
+  if (!Array.isArray(data.comparison_data)) {
+    data.comparison_data = [];
+  }
   return { result: data };
 }

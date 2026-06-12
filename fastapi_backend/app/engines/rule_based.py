@@ -8,7 +8,7 @@ from app.engines.base import SimulationEngine
 from app.models.branch import Branch
 from app.models.operations import Operation
 from app.models.sales import Sales
-from app.schemas.simulation import LocationConditions, SimulationResult
+from app.schemas.simulation import ComparisonEntry, LocationConditions, SimulationResult
 
 FALLBACK_THRESHOLD = 5
 EV_CORRECTION = 1.08
@@ -246,6 +246,15 @@ class RuleBasedEngine(SimulationEngine):
         else:
             percentile = 50.0
 
+        top5 = sorted(effective, key=lambda m: m.avg_monthly_revenue, reverse=True)[:5]
+        comparison_data = [
+            ComparisonEntry(
+                name=(m.branch_name[:12] + "…" if len(m.branch_name) > 12 else m.branch_name),
+                monthly_revenue=round(m.avg_monthly_revenue, 2),
+            )
+            for m in top5
+        ]
+
         return SimulationResult(
             estimated_monthly_revenue=round(weighted_rev, 2),
             occupancy_rate=round(occupancy_rate, 2),
@@ -254,4 +263,5 @@ class RuleBasedEngine(SimulationEngine):
             verdict=_calc_verdict(percentile),
             similar_branch_count=len(effective),
             fallback_used=fallback_used,
+            comparison_data=comparison_data,
         )

@@ -122,6 +122,8 @@ class TestSimulationRoute:
         assert data["verdict"] in ("추천", "검토필요", "비추천")
         assert isinstance(data["similar_branch_count"], int)
         assert data["fallback_used"] is True
+        assert "comparison_data" in data
+        assert isinstance(data["comparison_data"], list)
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_ev_charging_increases_revenue(self, sim_client):
