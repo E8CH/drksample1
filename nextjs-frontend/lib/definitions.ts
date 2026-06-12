@@ -31,6 +31,29 @@ export const loginSchema = z.object({
   username: z.string().min(1, { message: "Username is required" }),
 });
 
+export const simulationInputSchema = z.object({
+  address: z.string().min(1, "주소를 입력하세요"),
+  areaSqm: z.coerce
+    .number({ invalid_type_error: "숫자를 입력하세요" })
+    .positive("0보다 커야 합니다"),
+  monthlyRent: z.coerce
+    .number({ invalid_type_error: "숫자를 입력하세요" })
+    .positive("0보다 커야 합니다"),
+  maintenanceFee: z.coerce
+    .number({ invalid_type_error: "숫자를 입력하세요" })
+    .nonnegative()
+    .optional(),
+  buildingUse: z.enum(["상업용", "근린생활시설", "창고", "기타"]).optional(),
+  evCharging: z.boolean().optional().default(false),
+  parkingSpots: z.coerce
+    .number({ invalid_type_error: "숫자를 입력하세요" })
+    .int()
+    .nonnegative()
+    .optional(),
+});
+
+export type SimulationInput = z.infer<typeof simulationInputSchema>;
+
 export const itemSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().min(1, { message: "Description is required" }),

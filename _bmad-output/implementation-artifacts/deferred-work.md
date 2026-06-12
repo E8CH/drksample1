@@ -1,3 +1,11 @@
+## Deferred from: code review of 2-1-입지-조건-입력-폼 (2026-06-12)
+
+- Server Action `runSimulation` 인증 가드 없음 — Story 2-2에서 실제 API 연결 시 `getServerSession()` 추가 필요 (SSRF 방지)
+- `z.coerce.number()` + NaN → `invalid_type_error` 메시지 Zod 버전 의존 — Zod 3.22+ 확인 필요, 필요 시 `.refine(!isNaN)` 추가
+- buildingUse Select deselect 옵션 없음 — 선택 후 "미선택"으로 되돌리기 불가; UX 개선 여지
+- EV충전 checkbox(시각적) vs toggle-switch(UX 스펙) — 기능은 동일, 시각적 개선은 shadcn Switch 설치 후 교체 가능
+- `ValidatorFn` 수동 타입 — `z.SafeParseReturnType<unknown>` 사용으로 교체 권장 (Zod v4 대비)
+
 ## Deferred from: code review of 1-5-기본-레이아웃-다락-브랜드-적용 (2026-06-12)
 
 - D1: CDN 폰트(Pretendard) SRI/CSP 없음 — jsdelivr subresource integrity 미적용; 운영 전 self-host 또는 `<link integrity="...">` 적용 필요
