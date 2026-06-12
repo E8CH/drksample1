@@ -1,3 +1,10 @@
+## Deferred from: code review of 3-2-제안서-팝업-비교-차트 (2026-06-12)
+
+- D1: setMapLoading(false) 취소 경로 미호출 [SimulationContainer.tsx] — pre-existing Story 3-1, 쾌속 재제출 시 무한 스피너 가능
+- D2: 12자 트런케이션 이름 충돌 [rule_based.py:252] — 동일 12자 접두사 지점 구분 불가; 저영향 edge case
+- D3: _empty_db() 다중 쿼리 한계 [test_engines.py:14] — 단일 mock 반환값, 다중 DB 쿼리 패턴 변경 시 테스트 무력화 가능
+- D4: fallback 경로 comparison_data=[] 빈 리스트 assertion 부재 [test_simulation.py:124] — 회귀 검출 blind spot
+
 ## Deferred from: code review of 2-2-수익-시뮬레이션-연산-api (2026-06-12)
 
 - F2: `secure=False` 쿠키 — Railway 배포 시 `secure=True` 필요 (Story 1-4 F7과 동일)

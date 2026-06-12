@@ -4,6 +4,7 @@ import {
   Bar,
   Cell,
   XAxis,
+  YAxis,
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
@@ -36,7 +37,9 @@ export default function ComparisonBarChart({ data, targetRevenue }: Props) {
           interval={0}
           angle={-20}
           textAnchor="end"
+          tickFormatter={(v: string) => (v.length > 6 ? v.slice(0, 6) + "…" : v)}
         />
+        <YAxis hide />
         <Tooltip
           formatter={(value) =>
             typeof value === "number"
@@ -46,8 +49,8 @@ export default function ComparisonBarChart({ data, targetRevenue }: Props) {
           contentStyle={{ borderRadius: "8px", fontSize: "12px" }}
         />
         <Bar dataKey="monthly_revenue" radius={[4, 4, 0, 0]}>
-          {chartData.map((entry, i) => (
-            <Cell key={i} fill={entry.isTarget ? "#2563EB" : "#BFDBFE"} />
+          {chartData.map((entry) => (
+            <Cell key={entry.name} fill={entry.isTarget ? "#2563EB" : "#BFDBFE"} />
           ))}
         </Bar>
       </BarChart>

@@ -64,6 +64,7 @@ export default function SimulationContainer() {
   function handleResult(r: SimulationResultData, input: SimulationInput) {
     setResult(r);
     setSubmittedInput(input);
+    setProposalOpen(false);
     setResultVersion((v) => v + 1);
     // seq always increments → same-address re-submit still triggers new fetch
     setMapRequest((prev) => ({ address: input.address, seq: (prev?.seq ?? 0) + 1 }));

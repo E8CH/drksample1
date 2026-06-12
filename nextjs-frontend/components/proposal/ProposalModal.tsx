@@ -40,7 +40,7 @@ export default function ProposalModal({ open, onClose, result, input }: Props) {
           <button
             onClick={onClose}
             aria-label="닫기"
-            className="p-1.5 rounded-md hover:bg-dalock-surface text-dalock-text2 hover:text-dalock-text1 transition-colors"
+            className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-dalock-surface text-dalock-text2 hover:text-dalock-text1 transition-colors"
           >
             ✕
           </button>
@@ -62,14 +62,12 @@ export default function ProposalModal({ open, onClose, result, input }: Props) {
               </span>
               <span>
                 <span className="text-dalock-text2">임대료 </span>
-                {Math.round(input.monthlyRent / 10_000)}만원
+                {formatManWon(input.monthlyRent)}
               </span>
-              {input.buildingUse && (
-                <span>
-                  <span className="text-dalock-text2">용도 </span>
-                  {input.buildingUse}
-                </span>
-              )}
+              <span>
+                <span className="text-dalock-text2">용도 </span>
+                {input.buildingUse ?? "미지정"}
+              </span>
               <span>
                 <span className="text-dalock-text2">EV충전 </span>
                 {input.evCharging ? "가능" : "불가"}

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: "2026-06-12"
-last_updated: "2026-06-12"
+last_updated: "2026-06-13"
 project: drksample1
 project_key: NOKEY
 tracking_system: file-system
@@ -61,7 +61,7 @@ development_status:
   # ─── Epic 3: 지도 시각화 & 제안서 PDF 출력 ───────────────────────
   epic-3: in-progress
   3-1-카카오맵-지도-시각화: done
-  3-2-제안서-팝업-비교-차트: review
+  3-2-제안서-팝업-비교-차트: done
   3-3-pdf-다운로드: backlog
   epic-3-retrospective: optional
 

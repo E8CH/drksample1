@@ -246,14 +246,17 @@ class RuleBasedEngine(SimulationEngine):
         else:
             percentile = 50.0
 
-        top5 = sorted(effective, key=lambda m: m.avg_monthly_revenue, reverse=True)[:5]
-        comparison_data = [
-            ComparisonEntry(
-                name=(m.branch_name[:12] + "…" if len(m.branch_name) > 12 else m.branch_name),
-                monthly_revenue=round(m.avg_monthly_revenue, 2),
-            )
-            for m in top5
-        ]
+        if fallback_used:
+            comparison_data = []
+        else:
+            top5 = sorted(effective, key=lambda m: m.avg_monthly_revenue, reverse=True)[:5]
+            comparison_data = [
+                ComparisonEntry(
+                    name=(m.branch_name[:12] + "…" if len(m.branch_name) > 12 else m.branch_name),
+                    monthly_revenue=round(m.avg_monthly_revenue, 2),
+                )
+                for m in top5
+            ]
 
         return SimulationResult(
             estimated_monthly_revenue=round(weighted_rev, 2),
