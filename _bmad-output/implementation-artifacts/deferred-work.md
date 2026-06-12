@@ -1,3 +1,14 @@
+## Deferred from: code review of 4-1-수익분석표-게시판-정렬-필터 (2026-06-12)
+
+- D1: f-string SQL ORDER BY 구성 — sort_col/order_dir는 Literal 타입 검증 통과 값이므로 현재는 안전; 향후 allowlist 변경 시 injection 위험, text()+bindparams 패턴으로 교체 권장 [fastapi_backend/app/routes/sales.py]
+- D2: formatMonth 입력 가드 없음 — TO_CHAR('YYYY-MM') 포맷이 안정적이므로 실제 발생 가능성 낮음; 방어적 코딩으로 null 체크 추가 권장 [nextjs-frontend/components/board/BranchDataTable.tsx:26]
+- D3: occupancy_rate 레이블 — revenue/avg×100로 계산되는 상대 지표, 진짜 점유율(가동률)이 아님; 스펙 의도적 설계, 운영 전 레이블 명확화 검토 필요
+- D4: Cookie 헤더 HTTP 전달 — API_URL이 HTTPS 아닐 경우 토큰 평문 전달; 기존 패턴(simulation.ts)과 동일, 운영 배포 시 HTTPS 강제 필요
+- D5: buildParams 중복 정의 — BranchDataTable(page 유지)과 TableToolbar(page=1 초기화) 간 의도적 행동 차이 있음; 공유 유틸 추출 가능하나 현재 기능에 영향 없음
+- D6: ILIKE % _ 와일드카드 — 사용자 입력의 % / _가 SQL LIKE 특수문자로 처리됨; 지점명 검색에서 자연어 와일드카드 허용으로 보안 이슈 없음, 운영 전 escape 옵션 검토 가능 (Story 2-2 F4와 동일)
+- D7: API_URL 환경변수 null 체크 — undefined 시 "undefined/sales" URL 생성; 기존 서버 컴포넌트 패턴과 동일, 인프라 레벨 필수값 보장 필요
+- D8: fetchSales 에러 경계 없음 — Next.js error.tsx로 상위 에러 처리 가능; 별도 에러 UX 스토리에서 처리
+
 ## Deferred from: code review of 3-3-pdf-다운로드 (2026-06-13)
 
 - D1: today() 함수 중복 정의 (ProposalModal.tsx, ProposalDocument.tsx) — 리팩토링으로 공유 유틸 이동 권장; 기능 영향 없음

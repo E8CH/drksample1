@@ -70,6 +70,24 @@ export type SimulationResultData = {
   comparison_data: ComparisonEntry[];
 };
 
+export type SalesRow = {
+  branch_name: string;
+  address: string;
+  sale_month: string;
+  monthly_revenue: number;
+  electricity_fee: number;
+  operating_cost: number;
+  net_profit: number;
+  occupancy_rate: number;
+};
+
+export type SalesListResponse = {
+  data: SalesRow[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
 export type BranchPinData = {
   branch_name: string;
   address: string;
