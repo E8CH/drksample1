@@ -45,5 +45,9 @@ export async function runSimulation(input: SimulationInput): Promise<SimulationA
   }
 
   const data = (await res.json()) as SimulationResultData;
+  const VALID_VERDICTS: SimulationResultData["verdict"][] = ["추천", "검토필요", "비추천"];
+  if (!data?.verdict || !VALID_VERDICTS.includes(data.verdict)) {
+    return { error: "서버 응답 형식 오류가 발생했습니다" };
+  }
   return { result: data };
 }

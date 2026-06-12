@@ -12,12 +12,12 @@ function formatManWon(value: number): string {
   return Math.round(value / 10_000).toLocaleString("ko-KR");
 }
 
-type MetricCardProps = { label: string; value: string; unit: string };
-function MetricCard({ label, value, unit }: MetricCardProps) {
+type MetricCardProps = { label: string; value: string; unit: string; valueClass?: string };
+function MetricCard({ label, value, unit, valueClass = "text-dalock-text1" }: MetricCardProps) {
   return (
     <div className="bg-dalock-surface rounded-lg p-4 flex flex-col gap-1">
       <p className="text-xs text-dalock-text2 font-medium">{label}</p>
-      <p className="text-2xl font-bold text-dalock-text1">
+      <p className={`text-2xl font-bold ${valueClass}`}>
         {value}
         <span className="text-sm font-normal text-dalock-text2 ml-1">{unit}</span>
       </p>
@@ -34,7 +34,6 @@ export default function SimulationResultCard({ result, onProposalClick }: Props)
 
   return (
     <div
-      key={result.estimated_monthly_revenue}
       className={`transform transition-all duration-300 ease-out ${
         visible ? "translate-x-0 opacity-100" : "translate-x-5 opacity-0"
       } flex flex-col gap-4 p-6 h-full overflow-y-auto`}
@@ -50,7 +49,7 @@ export default function SimulationResultCard({ result, onProposalClick }: Props)
       {/* Verdict */}
       <div className="flex items-center gap-2">
         <VerdictBadge verdict={result.verdict} percentile={result.percentile} />
-        {result.similar_branch_count > 0 && (
+        {!result.fallback_used && result.similar_branch_count > 0 && (
           <span className="text-xs text-dalock-text2">
             유사 지점 {result.similar_branch_count}개 기준
           </span>
@@ -73,13 +72,16 @@ export default function SimulationResultCard({ result, onProposalClick }: Props)
           label="예상 순수익"
           value={formatManWon(result.net_profit)}
           unit="만원"
+          valueClass={result.net_profit < 0 ? "text-dalock-danger" : "text-dalock-text1"}
         />
       </div>
 
       {/* 제안서 출력 버튼 */}
+      {/* Story 3에서 구현 예정 — 현재는 placeholder */}
       <button
         type="button"
         onClick={onProposalClick}
+        title="제안서 출력 기능은 곧 추가됩니다"
         className="mt-auto w-full flex items-center justify-center rounded-md bg-dalock-primary text-white text-sm font-medium px-4 py-2.5 hover:bg-blue-700 transition-colors"
       >
         제안서 출력

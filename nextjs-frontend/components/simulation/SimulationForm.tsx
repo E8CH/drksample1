@@ -70,6 +70,7 @@ export default function SimulationForm({ onResult }: Props) {
     !values.address.trim() ||
     !(Number(values.areaSqm) > 0) ||
     !(Number(values.monthlyRent) > 0) ||
+    Object.keys(errors).length > 0 ||
     isPending;
 
   function setField(name: keyof FieldValues, value: string | boolean) {
@@ -125,6 +126,8 @@ export default function SimulationForm({ onResult }: Props) {
           setServerError(res.error);
         } else if (res.result) {
           onResult?.(res.result);
+        } else {
+          setServerError("알 수 없는 오류가 발생했습니다");
         }
       });
     });
@@ -221,13 +224,13 @@ export default function SimulationForm({ onResult }: Props) {
 
       {/* 건축물용도 */}
       <div className="flex flex-col gap-1.5">
-        <Label className="text-dalock-text1 text-sm font-medium">건축물용도</Label>
+        <Label htmlFor="buildingUse" className="text-dalock-text1 text-sm font-medium">건축물용도</Label>
         <Select
           value={values.buildingUse}
           onValueChange={(v) => setField("buildingUse", v)}
           disabled={isPending}
         >
-          <SelectTrigger>
+          <SelectTrigger id="buildingUse">
             <SelectValue placeholder="선택하세요" />
           </SelectTrigger>
           <SelectContent>
@@ -246,7 +249,7 @@ export default function SimulationForm({ onResult }: Props) {
           id="evCharging"
           checked={values.evCharging}
           onChange={(e) => setField("evCharging", e.target.checked)}
-          className="w-4 h-4 accent-dalock-primary"
+          className="w-4 h-4 accent-dalock-primary disabled:opacity-50 disabled:cursor-not-allowed"
           disabled={isPending}
         />
         <Label htmlFor="evCharging" className="text-dalock-text1 text-sm font-medium cursor-pointer">
