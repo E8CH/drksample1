@@ -1,0 +1,73 @@
+# generated: 2026-06-12
+# last_updated: 2026-06-12
+# project: drksample1
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog → in-progress: Automatically when first story is created (via create-story)
+#   - in-progress → done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Ready for code review (via Dev's code-review workflow)
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - Developer typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+
+generated: "2026-06-12"
+last_updated: "2026-06-12"
+project: drksample1
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+  # ─── Epic 1: 프로젝트 기반 구축 ───────────────────────────────────
+  epic-1: in-progress
+  1-1-프로젝트-초기화-railway-배포-환경-구성: done
+  1-2-데이터베이스-스키마-alembic-마이그레이션: done
+  1-3-simulationengine-mapprovider-추상화-구현: done
+  1-4-jwt-인증-로그인-페이지: done
+  1-5-기본-레이아웃-다락-브랜드-적용: backlog
+  epic-1-retrospective: optional
+
+  # ─── Epic 2: 시뮬레이션 입력 & 결과 계산 ─────────────────────────
+  epic-2: backlog
+  2-1-입지-조건-입력-폼: backlog
+  2-2-수익-시뮬레이션-연산-api: backlog
+  2-3-시뮬레이션-결과-화면-표시: backlog
+  epic-2-retrospective: optional
+
+  # ─── Epic 3: 지도 시각화 & 제안서 PDF 출력 ───────────────────────
+  epic-3: backlog
+  3-1-카카오맵-지도-시각화: backlog
+  3-2-제안서-팝업-비교-차트: backlog
+  3-3-pdf-다운로드: backlog
+  epic-3-retrospective: optional
+
+  # ─── Epic 4: 수익분석표 게시판 & 데이터 관리 ─────────────────────
+  epic-4: backlog
+  4-1-수익분석표-게시판-정렬-필터: backlog
+  4-2-가상-데이터-전체-재생성: backlog
+  4-3-가상-데이터-전체-삭제-빈-상태-ui: backlog
+  epic-4-retrospective: optional

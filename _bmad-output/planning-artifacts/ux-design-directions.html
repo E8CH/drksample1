@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>다락 입지분석 — 디자인 방향 탐색</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F1F5F9; color: #0F172A; }
+
+  /* NAV */
+  nav { background: #1E293B; padding: 12px 32px; display: flex; gap: 8px; align-items: center; position: sticky; top: 0; z-index: 100; }
+  nav span { color: #94A3B8; font-size: 13px; margin-right: 16px; }
+  nav button { background: #334155; border: none; color: #CBD5E1; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all .15s; }
+  nav button.active, nav button:hover { background: #2563EB; color: white; }
+
+  /* SECTION */
+  .section { display: none; padding: 32px; }
+  .section.active { display: block; }
+  .section-title { font-size: 22px; font-weight: 700; color: #0F172A; margin-bottom: 6px; }
+  .section-desc { font-size: 14px; color: #64748B; margin-bottom: 32px; }
+
+  /* DIRECTION CARDS */
+  .directions-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); gap: 32px; }
+  .direction-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,.08), 0 4px 12px rgba(0,0,0,.04); border: 2px solid transparent; transition: all .2s; }
+  .direction-card:hover { border-color: #2563EB; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(37,99,235,.15); }
+  .direction-card.recommended { border-color: #2563EB; }
+  .direction-header { padding: 16px 20px; border-bottom: 1px solid #F1F5F9; display: flex; align-items: center; justify-content: space-between; }
+  .direction-header h3 { font-size: 15px; font-weight: 600; }
+  .badge { font-size: 11px; padding: 3px 8px; border-radius: 20px; font-weight: 600; }
+  .badge-blue { background: #EFF6FF; color: #2563EB; }
+  .badge-green { background: #F0FDF4; color: #16A34A; }
+  .direction-body { padding: 20px; }
+
+  /* MOCKUP STYLES */
+  .mockup { border-radius: 10px; overflow: hidden; border: 1px solid #E2E8F0; background: white; }
+  .mockup-topbar { background: #1E293B; height: 28px; display: flex; align-items: center; padding: 0 12px; gap: 5px; }
+  .mockup-topbar span { width: 8px; height: 8px; border-radius: 50%; }
+  .mockup-topbar span:nth-child(1) { background: #EF4444; }
+  .mockup-topbar span:nth-child(2) { background: #F59E0B; }
+  .mockup-topbar span:nth-child(3) { background: #22C55E; }
+
+  /* VARIANT 1: 좌측 패널 + 우측 지도 */
+  .v1-layout { display: flex; height: 380px; }
+  .v1-sidebar { width: 300px; border-right: 1px solid #E2E8F0; display: flex; flex-direction: column; }
+  .v1-navbar { background: #2563EB; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
+  .v1-logo { color: white; font-size: 13px; font-weight: 700; }
+  .v1-nav-links { display: flex; gap: 6px; margin-left: auto; }
+  .v1-nav-link { background: rgba(255,255,255,.15); color: white; border-radius: 4px; padding: 3px 8px; font-size: 10px; }
+  .v1-nav-link.active { background: white; color: #2563EB; }
+  .v1-form { padding: 12px; flex: 1; overflow-y: auto; }
+  .v1-form-title { font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 10px; }
+  .v1-input-group { margin-bottom: 8px; }
+  .v1-label { font-size: 9px; color: #64748B; margin-bottom: 2px; }
+  .v1-input { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 5px; padding: 5px 8px; font-size: 10px; width: 100%; color: #0F172A; }
+  .v1-row { display: flex; gap: 6px; }
+  .v1-row .v1-input-group { flex: 1; }
+  .v1-btn { background: #2563EB; color: white; border: none; border-radius: 6px; padding: 7px; font-size: 11px; font-weight: 600; width: 100%; cursor: pointer; margin-top: 4px; }
+  .v1-map { flex: 1; background: #E8F0E8; position: relative; overflow: hidden; }
+  .v1-map-bg { width: 100%; height: 100%; background: linear-gradient(135deg, #D4E6C3 0%, #C8DDB8 30%, #B8D4A8 60%, #D4E6C3 100%); position: relative; }
+  .v1-road { position: absolute; background: rgba(255,255,255,.6); }
+  .v1-road.h1 { width: 100%; height: 3px; top: 35%; }
+  .v1-road.h2 { width: 100%; height: 2px; top: 60%; }
+  .v1-road.v1 { height: 100%; width: 3px; left: 40%; }
+  .v1-road.v2 { height: 100%; width: 2px; left: 65%; }
+  .v1-pin { position: absolute; width: 18px; height: 18px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); display: flex; align-items: center; justify-content: center; font-size: 7px; }
+  .v1-pin.target { background: #2563EB; top: 33%; left: 38%; box-shadow: 0 2px 8px rgba(37,99,235,.5); }
+  .v1-pin.branch { background: #64748B; }
+  .v1-pin.branch:nth-child(2) { top: 20%; left: 60%; }
+  .v1-pin.branch:nth-child(3) { top: 55%; left: 25%; }
+  .v1-pin.branch:nth-child(4) { top: 65%; left: 70%; }
+  .v1-pin-star { color: white; font-size: 8px; transform: rotate(45deg); }
+
+  /* RESULT STATE for V1 */
+  .v1-result { padding: 12px; background: white; border-top: 1px solid #E2E8F0; }
+  .v1-result-title { font-size: 10px; font-weight: 700; color: #0F172A; margin-bottom: 8px; }
+  .v1-result-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .v1-result-card { flex: 1; background: #F8FAFC; border-radius: 6px; padding: 6px 8px; text-align: center; }
+  .v1-result-val { font-size: 12px; font-weight: 700; color: #2563EB; }
+  .v1-result-lbl { font-size: 8px; color: #64748B; margin-top: 1px; }
+  .v1-verdict { background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 6px; padding: 6px 10px; display: flex; align-items: center; justify-content: space-between; }
+  .v1-verdict-text { font-size: 10px; font-weight: 700; color: #16A34A; }
+  .v1-verdict-btn { background: #2563EB; color: white; border: none; border-radius: 4px; padding: 4px 8px; font-size: 9px; cursor: pointer; }
+
+  /* VARIANT 2: 상단 폼 + 하단 분할 */
+  .v2-layout { height: 380px; display: flex; flex-direction: column; }
+  .v2-navbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 8px 14px; display: flex; align-items: center; gap: 10px; }
+  .v2-logo-text { font-size: 13px; font-weight: 700; color: #2563EB; }
+  .v2-nav-pills { display: flex; gap: 4px; margin-left: auto; }
+  .v2-pill { font-size: 10px; padding: 4px 10px; border-radius: 20px; color: #64748B; }
+  .v2-pill.active { background: #EFF6FF; color: #2563EB; font-weight: 600; }
+  .v2-form-bar { background: #F8FAFC; border-bottom: 1px solid #E2E8F0; padding: 10px 14px; display: flex; gap: 8px; align-items: flex-end; }
+  .v2-form-bar .v1-input-group { flex: 1; margin-bottom: 0; }
+  .v2-form-bar .v1-btn { width: auto; padding: 5px 14px; margin-top: 0; flex-shrink: 0; }
+  .v2-body { flex: 1; display: flex; }
+  .v2-map { flex: 1; background: linear-gradient(135deg, #D4E6C3 0%, #C8DDB8 50%, #D4E6C3 100%); position: relative; overflow: hidden; }
+  .v2-results { width: 260px; border-left: 1px solid #E2E8F0; padding: 12px; overflow-y: auto; }
+  .v2-results h4 { font-size: 11px; font-weight: 700; margin-bottom: 8px; }
+  .v2-kpi-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 8px; }
+  .v2-kpi { background: #F8FAFC; border-radius: 6px; padding: 8px; text-align: center; }
+  .v2-kpi-val { font-size: 13px; font-weight: 700; color: #2563EB; }
+  .v2-kpi-lbl { font-size: 8px; color: #64748B; }
+  .v2-chart { background: #F8FAFC; border-radius: 6px; padding: 8px; margin-bottom: 8px; }
+  .v2-chart-title { font-size: 9px; color: #64748B; margin-bottom: 6px; }
+  .v2-bars { display: flex; align-items: flex-end; gap: 4px; height: 40px; }
+  .v2-bar { background: #BFDBFE; border-radius: 2px 2px 0 0; flex: 1; }
+  .v2-bar.highlight { background: #2563EB; }
+  .v2-verdict-badge { background: #F0FDF4; border: 1px solid #86EFAC; border-radius: 8px; padding: 8px; text-align: center; }
+  .v2-verdict-label { font-size: 11px; font-weight: 700; color: #16A34A; }
+  .v2-verdict-sub { font-size: 9px; color: #64748B; }
+  .v2-pdf-btn { background: #2563EB; color: white; border: none; border-radius: 6px; padding: 6px; font-size: 10px; width: 100%; margin-top: 8px; cursor: pointer; }
+
+  /* VARIANT 3: 전체화면 지도 + 오버레이 */
+  .v3-layout { height: 380px; position: relative; overflow: hidden; }
+  .v3-map-full { width: 100%; height: 100%; background: linear-gradient(135deg, #D4E6C3 0%, #C8DDB8 30%, #B8D4A8 60%, #D4E6C3 100%); }
+  .v3-overlay { position: absolute; top: 0; left: 0; bottom: 0; width: 280px; background: rgba(255,255,255,.95); backdrop-filter: blur(8px); border-right: 1px solid rgba(226,232,240,.8); display: flex; flex-direction: column; }
+  .v3-logo-bar { background: #2563EB; padding: 10px 14px; }
+  .v3-logo-text { color: white; font-size: 13px; font-weight: 700; }
+  .v3-form-scroll { flex: 1; padding: 12px; overflow-y: auto; }
+  .v3-topbar-abs { position: absolute; top: 10px; right: 10px; display: flex; gap: 6px; }
+  .v3-map-control { background: white; border-radius: 6px; padding: 4px 8px; font-size: 10px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+
+  /* MODAL PREVIEW */
+  .modal-wrapper { background: #0F172A; border-radius: 10px; padding: 24px; display: flex; align-items: center; justify-content: center; }
+  .modal-box { background: white; border-radius: 12px; width: 520px; overflow: hidden; box-shadow: 0 25px 50px rgba(0,0,0,.4); }
+  .modal-header { background: #2563EB; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+  .modal-logo { color: white; font-size: 16px; font-weight: 800; letter-spacing: -.5px; }
+  .modal-subtitle { color: rgba(255,255,255,.8); font-size: 11px; }
+  .modal-close { color: white; background: rgba(255,255,255,.2); border: none; border-radius: 50%; width: 24px; height: 24px; cursor: pointer; font-size: 14px; }
+  .modal-body { padding: 20px; }
+  .modal-property { background: #F8FAFC; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; }
+  .modal-property-title { font-size: 11px; color: #64748B; margin-bottom: 4px; }
+  .modal-property-addr { font-size: 13px; font-weight: 600; color: #0F172A; margin-bottom: 6px; }
+  .modal-property-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .modal-tag { background: #EFF6FF; color: #2563EB; font-size: 10px; padding: 2px 7px; border-radius: 4px; }
+  .modal-kpis { display: grid; grid-template-columns: repeat(3,1fr); gap: 10px; margin-bottom: 14px; }
+  .modal-kpi { background: #F8FAFC; border-radius: 8px; padding: 10px; text-align: center; }
+  .modal-kpi-val { font-size: 15px; font-weight: 700; color: #2563EB; }
+  .modal-kpi-lbl { font-size: 9px; color: #64748B; margin-top: 2px; }
+  .modal-chart-area { background: #F8FAFC; border-radius: 8px; padding: 12px; margin-bottom: 14px; }
+  .modal-chart-title { font-size: 11px; font-weight: 600; color: #0F172A; margin-bottom: 10px; }
+  .modal-chart-bars { display: flex; align-items: flex-end; gap: 6px; height: 60px; }
+  .modal-bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .modal-bar { width: 100%; border-radius: 3px 3px 0 0; }
+  .modal-bar.this { background: #2563EB; }
+  .modal-bar.avg { background: #BFDBFE; }
+  .modal-bar-lbl { font-size: 8px; color: #94A3B8; }
+  .modal-verdict-row { display: flex; gap: 10px; align-items: center; }
+  .modal-verdict-badge { background: #F0FDF4; border: 2px solid #86EFAC; border-radius: 10px; padding: 10px 16px; flex: 1; text-align: center; }
+  .modal-verdict-val { font-size: 18px; font-weight: 800; color: #16A34A; }
+  .modal-verdict-sub { font-size: 10px; color: #64748B; }
+  .modal-percentile { background: #EFF6FF; border-radius: 10px; padding: 10px 16px; flex: 1; text-align: center; }
+  .modal-percentile-val { font-size: 18px; font-weight: 800; color: #2563EB; }
+  .modal-footer { padding: 14px 20px; border-top: 1px solid #F1F5F9; display: flex; gap: 8px; justify-content: flex-end; background: #FAFAFA; }
+  .modal-btn-secondary { background: white; border: 1px solid #E2E8F0; color: #64748B; border-radius: 7px; padding: 8px 16px; font-size: 12px; cursor: pointer; }
+  .modal-btn-primary { background: #2563EB; color: white; border: none; border-radius: 7px; padding: 8px 20px; font-size: 12px; font-weight: 600; cursor: pointer; }
+  .modal-date { font-size: 10px; color: #94A3B8; margin-right: auto; align-self: center; }
+
+  /* TABLE PREVIEW */
+  .table-layout { height: 380px; display: flex; flex-direction: column; }
+  .table-topbar { background: white; border-bottom: 1px solid #E2E8F0; padding: 10px 14px; display: flex; align-items: center; gap: 8px; }
+  .table-title { font-size: 14px; font-weight: 700; }
+  .table-filters { display: flex; gap: 6px; margin-left: auto; }
+  .table-filter { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 5px; padding: 4px 10px; font-size: 10px; color: #64748B; }
+  .table-actions { display: flex; gap: 6px; }
+  .table-btn-gen { background: #2563EB; color: white; border: none; border-radius: 5px; padding: 4px 10px; font-size: 10px; cursor: pointer; }
+  .table-btn-del { background: white; border: 1px solid #FCA5A5; color: #DC2626; border-radius: 5px; padding: 4px 10px; font-size: 10px; cursor: pointer; }
+  .table-wrap { flex: 1; overflow: auto; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .data-table th { background: #F8FAFC; padding: 8px 12px; text-align: left; font-weight: 600; color: #475569; font-size: 10px; border-bottom: 1px solid #E2E8F0; white-space: nowrap; cursor: pointer; }
+  .data-table th:hover { background: #EFF6FF; }
+  .data-table th .sort-icon { color: #94A3B8; font-size: 8px; margin-left: 3px; }
+  .data-table td { padding: 7px 12px; border-bottom: 1px solid #F1F5F9; color: #0F172A; white-space: nowrap; }
+  .data-table tr:hover td { background: #F8FAFC; }
+  .positive { color: #16A34A; font-weight: 600; }
+  .pill-occ { background: #EFF6FF; color: #2563EB; padding: 2px 6px; border-radius: 10px; font-size: 10px; font-weight: 600; }
+  .table-pagination { padding: 8px 14px; border-top: 1px solid #E2E8F0; display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #64748B; background: white; }
+  .page-btns { display: flex; gap: 4px; }
+  .page-btn { background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 4px; padding: 3px 8px; font-size: 10px; cursor: pointer; }
+  .page-btn.active { background: #2563EB; color: white; border-color: #2563EB; }
+
+  /* DIRECTION DESCRIPTION */
+  .direction-desc { margin-top: 14px; padding: 12px; background: #F8FAFC; border-radius: 8px; }
+  .direction-pros { list-style: none; }
+  .direction-pros li { font-size: 11px; color: #475569; padding: 2px 0; }
+  .direction-pros li::before { content: "✓ "; color: #16A34A; font-weight: 700; }
+  .direction-cons { list-style: none; margin-top: 6px; }
+  .direction-cons li { font-size: 11px; color: #475569; padding: 2px 0; }
+  .direction-cons li::before { content: "△ "; color: #D97706; }
+</style>
+</head>
+<body>
+
+<nav>
+  <span>🎨 디자인 방향 탐색</span>
+  <button class="active" onclick="show('page1')">Page 1 — 시뮬레이션</button>
+  <button onclick="show('modal')">제안서 팝업</button>
+  <button onclick="show('page2')">Page 2 — 게시판</button>
+</nav>
+
+<!-- PAGE 1 DIRECTIONS -->
+<div id="page1" class="section active">
+  <div class="section-title">Page 1 — 입지분석 시뮬레이션 레이아웃</div>
+  <div class="section-desc">3가지 레이아웃 방향을 비교합니다. 레퍼런스(다락 앱)와 가장 유사한 방향을 확인하세요.</div>
+
+  <div class="directions-grid">
+
+    <!-- DIRECTION 1 -->
+    <div class="direction-card recommended">
+      <div class="direction-header">
+        <h3>방향 A — 좌측 패널 고정 + 우측 지도</h3>
+        <span class="badge badge-blue">★ 권장 (레퍼런스 일치)</span>
+      </div>
+      <div class="direction-body">
+        <div class="mockup">
+          <div class="mockup-topbar">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="v1-layout">
+            <div class="v1-sidebar">
+              <div class="v1-navbar">
+                <div class="v1-logo">🏠 다락 어드민</div>
+                <div class="v1-nav-links">
+                  <div class="v1-nav-link active">입지분석</div>
+                  <div class="v1-nav-link">게시판</div>
+                </div>
+              </div>
+              <div class="v1-form">
+                <div class="v1-form-title">📍 입지 조건 입력</div>
+                <div class="v1-input-group">
+                  <div class="v1-label">주소</div>
+                  <div class="v1-input">서울 강남구 역삼동 123-4</div>
+                </div>
+                <div class="v1-row">
+                  <div class="v1-input-group">
+                    <div class="v1-label">면적 (㎡)</div>
+                    <div class="v1-input">320</div>
+                  </div>
+                  <div class="v1-input-group">
+                    <div class="v1-label">월 임대료</div>
+                    <div class="v1-input">280만원</div>
+                  </div>
+                </div>
+                <div class="v1-row">
+                  <div class="v1-input-group">
+                    <div class="v1-label">관리비</div>
+                    <div class="v1-input">25만원</div>
+                  </div>
+                  <div class="v1-input-group">
+                    <div class="v1-label">건축물용도</div>
+                    <div class="v1-input">근린생활</div>
+                  </div>
+                </div>
+              </div>
+              <div style="padding:0 12px 10px;">
+                <button class="v1-btn">⚡ 시뮬레이션 실행</button>
+              </div>
+              <div class="v1-result">
+                <div class="v1-result-title">📊 시뮬레이션 결과</div>
+                <div class="v1-result-row">
+                  <div class="v1-result-card">
+                    <div class="v1-result-val">847만원</div>
+                    <div class="v1-result-lbl">예상 월매출</div>
+                  </div>
+                  <div class="v1-result-card">
+                    <div class="v1-result-val">73%</div>
+                    <div class="v1-result-lbl">예상 점유율</div>
+                  </div>
+                  <div class="v1-result-card">
+                    <div class="v1-result-val">312만원</div>
+                    <div class="v1-result-lbl">예상 순수익</div>
+                  </div>
+                </div>
+                <div class="v1-verdict">
+                  <span class="v1-verdict-text">✅ 추천 — 상위 24%</span>
+                  <button class="v1-verdict-btn">📄 제안서 출력</button>
+                </div>
+              </div>
+            </div>
+            <div class="v1-map">
+              <div class="v1-map-bg">
+                <div class="v1-road h1"></div>
+                <div class="v1-road h2"></div>
+                <div class="v1-road v1"></div>
+                <div class="v1-road v2"></div>
+                <div class="v1-pin target"><span class="v1-pin-star">★</span></div>
+                <div class="v1-pin branch"></div>
+                <div class="v1-pin branch"></div>
+                <div class="v1-pin branch"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-desc">
+          <ul class="direction-pros">
+            <li>다락 앱 레퍼런스와 동일한 레이아웃 패턴</li>
+            <li>입력 폼과 결과가 같은 패널에서 자연스럽게 연결</li>
+            <li>지도가 충분한 공간을 차지해 시각적 임팩트 최대화</li>
+            <li>본사 담당자에게 친숙한 UX</li>
+          </ul>
+          <ul class="direction-cons">
+            <li>좁은 화면에서 패널이 지도를 가릴 수 있음</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIRECTION 2 -->
+    <div class="direction-card">
+      <div class="direction-header">
+        <h3>방향 B — 상단 폼 바 + 하단 분할</h3>
+        <span class="badge badge-green">심플</span>
+      </div>
+      <div class="direction-body">
+        <div class="mockup">
+          <div class="mockup-topbar">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="v2-layout">
+            <div class="v2-navbar">
+              <div class="v2-logo-text">🏠 다락 어드민</div>
+              <div class="v2-nav-pills">
+                <div class="v2-pill active">입지분석</div>
+                <div class="v2-pill">게시판</div>
+              </div>
+            </div>
+            <div class="v2-form-bar">
+              <div class="v1-input-group" style="flex:2">
+                <div class="v1-label">주소</div>
+                <div class="v1-input">서울 강남구 역삼동 123-4</div>
+              </div>
+              <div class="v1-input-group">
+                <div class="v1-label">면적 (㎡)</div>
+                <div class="v1-input">320</div>
+              </div>
+              <div class="v1-input-group">
+                <div class="v1-label">임대료</div>
+                <div class="v1-input">280만원</div>
+              </div>
+              <button class="v1-btn" style="width:auto;padding:5px 14px;margin-top:12px">실행</button>
+            </div>
+            <div class="v2-body">
+              <div class="v2-map">
+                <div style="width:100%;height:100%;background:linear-gradient(135deg,#D4E6C3,#C8DDB8,#D4E6C3);position:relative;">
+                  <div class="v1-road h1"></div>
+                  <div class="v1-road h2"></div>
+                  <div class="v1-road v1"></div>
+                  <div class="v1-pin target"><span class="v1-pin-star">★</span></div>
+                  <div class="v1-pin branch"></div>
+                  <div class="v1-pin branch"></div>
+                </div>
+              </div>
+              <div class="v2-results">
+                <h4>시뮬레이션 결과</h4>
+                <div class="v2-kpi-grid">
+                  <div class="v2-kpi"><div class="v2-kpi-val">847만</div><div class="v2-kpi-lbl">예상매출</div></div>
+                  <div class="v2-kpi"><div class="v2-kpi-val">73%</div><div class="v2-kpi-lbl">점유율</div></div>
+                  <div class="v2-kpi"><div class="v2-kpi-val">312만</div><div class="v2-kpi-lbl">순수익</div></div>
+                  <div class="v2-kpi"><div class="v2-kpi-val">24위</div><div class="v2-kpi-lbl">전체순위</div></div>
+                </div>
+                <div class="v2-chart">
+                  <div class="v2-chart-title">브랜드 비교 (월매출)</div>
+                  <div class="v2-bars">
+                    <div class="v2-bar" style="height:55%"></div>
+                    <div class="v2-bar" style="height:70%"></div>
+                    <div class="v2-bar highlight" style="height:85%"></div>
+                    <div class="v2-bar" style="height:60%"></div>
+                    <div class="v2-bar" style="height:45%"></div>
+                  </div>
+                </div>
+                <div class="v2-verdict-badge">
+                  <div class="v2-verdict-label">✅ 추천</div>
+                  <div class="v2-verdict-sub">상위 24% 수준</div>
+                </div>
+                <button class="v2-pdf-btn">📄 제안서 출력</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-desc">
+          <ul class="direction-pros">
+            <li>지도와 결과를 동시에 넓게 볼 수 있음</li>
+            <li>입력 폼이 컴팩트해 화면이 넓어 보임</li>
+          </ul>
+          <ul class="direction-cons">
+            <li>입력 항목이 많아지면 상단 바가 복잡해짐</li>
+            <li>EV충전·주차 등 추가 필드 배치 어려움</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- DIRECTION 3 -->
+    <div class="direction-card">
+      <div class="direction-header">
+        <h3>방향 C — 전체화면 지도 + 오버레이 패널</h3>
+        <span class="badge" style="background:#FFF7ED;color:#D97706">임팩트 최강</span>
+      </div>
+      <div class="direction-body">
+        <div class="mockup">
+          <div class="mockup-topbar">
+            <span></span><span></span><span></span>
+          </div>
+          <div class="v3-layout">
+            <div class="v3-map-full" style="background:linear-gradient(135deg,#D4E6C3,#C8DDB8,#B8D4A8,#D4E6C3);position:relative;">
+              <div class="v1-road h1"></div>
+              <div class="v1-road h2"></div>
+              <div class="v1-road v1"></div>
+              <div class="v1-road v2"></div>
+              <div class="v1-pin target" style="top:40%;left:45%"><span class="v1-pin-star">★</span></div>
+              <div class="v1-pin branch" style="top:25%;left:65%"></div>
+              <div class="v1-pin branch" style="top:60%;left:30%"></div>
+              <div class="v1-pin branch" style="top:70%;left:75%"></div>
+              <div class="v3-topbar-abs">
+                <div class="v3-map-control">+ 확대</div>
+                <div class="v3-map-control">− 축소</div>
+              </div>
+            </div>
+            <div class="v3-overlay">
+              <div class="v3-logo-bar">
+                <div class="v3-logo-text">🏠 다락 어드민</div>
+              </div>
+              <div class="v3-form-scroll">
+                <div style="font-size:11px;font-weight:700;margin-bottom:10px;color:#0F172A;">📍 입지 조건 입력</div>
+                <div class="v1-input-group">
+                  <div class="v1-label">주소</div>
+                  <div class="v1-input">서울 강남구 역삼동 123</div>
+                </div>
+                <div class="v1-input-group">
+                  <div class="v1-label">면적 / 임대료</div>
+                  <div style="display:flex;gap:4px;">
+                    <div class="v1-input" style="flex:1">320㎡</div>
+                    <div class="v1-input" style="flex:1">280만</div>
+                  </div>
+                </div>
+                <button class="v1-btn" style="margin-top:8px">⚡ 실행</button>
+                <div style="margin-top:12px;padding-top:12px;border-top:1px solid #E2E8F0;">
+                  <div style="font-size:10px;font-weight:700;margin-bottom:8px;color:#0F172A;">📊 결과</div>
+                  <div class="v2-kpi-grid">
+                    <div class="v2-kpi"><div class="v2-kpi-val">847만</div><div class="v2-kpi-lbl">월매출</div></div>
+                    <div class="v2-kpi"><div class="v2-kpi-val">73%</div><div class="v2-kpi-lbl">점유율</div></div>
+                  </div>
+                  <div class="v2-verdict-badge" style="margin-top:8px">
+                    <div class="v2-verdict-label">✅ 추천</div>
+                    <div class="v2-verdict-sub">상위 24%</div>
+                  </div>
+                  <button class="v2-pdf-btn" style="margin-top:8px">📄 제안서 출력</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="direction-desc">
+          <ul class="direction-pros">
+            <li>지도가 전체 화면을 차지 — 시각적 임팩트 최대</li>
+            <li>시연 시 가장 인상적인 첫인상</li>
+          </ul>
+          <ul class="direction-cons">
+            <li>오버레이가 지도 일부를 가림</li>
+            <li>입력 필드가 많을 때 스크롤 필요</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- MODAL PREVIEW -->
+<div id="modal" class="section">
+  <div class="section-title">제안서 팝업 — 모달 디자인</div>
+  <div class="section-desc">수익분석 제안서 팝업의 레이아웃과 구성입니다. PDF 출력 시 이 레이아웃이 유지됩니다.</div>
+
+  <div style="max-width:600px;margin:0 auto;">
+    <div class="mockup">
+      <div class="mockup-topbar"><span></span><span></span><span></span></div>
+      <div class="modal-wrapper">
+        <div class="modal-box">
+          <div class="modal-header">
+            <div>
+              <div class="modal-logo">🏠 다락 (dalock)</div>
+              <div class="modal-subtitle">수익분석 제안서 — 자동 생성</div>
+            </div>
+            <button class="modal-close">✕</button>
+          </div>
+          <div class="modal-body">
+            <div class="modal-property">
+              <div class="modal-property-title">분석 대상 물건</div>
+              <div class="modal-property-addr">서울특별시 강남구 역삼동 123-4</div>
+              <div class="modal-property-tags">
+                <span class="modal-tag">면적 320㎡</span>
+                <span class="modal-tag">임대료 280만원</span>
+                <span class="modal-tag">관리비 25만원</span>
+                <span class="modal-tag">근린생활</span>
+                <span class="modal-tag">EV충전 가능</span>
+                <span class="modal-tag">주차 8대</span>
+              </div>
+            </div>
+            <div class="modal-kpis">
+              <div class="modal-kpi">
+                <div class="modal-kpi-val">847만원</div>
+                <div class="modal-kpi-lbl">예상 월 매출</div>
+              </div>
+              <div class="modal-kpi">
+                <div class="modal-kpi-val">73%</div>
+                <div class="modal-kpi-lbl">예상 점유율</div>
+              </div>
+              <div class="modal-kpi">
+                <div class="modal-kpi-val">312만원</div>
+                <div class="modal-kpi-lbl">예상 순수익</div>
+              </div>
+            </div>
+            <div class="modal-chart-area">
+              <div class="modal-chart-title">브랜드 내 유사 지점 비교 (월 매출 기준)</div>
+              <div class="modal-chart-bars">
+                <div class="modal-bar-group">
+                  <div class="modal-bar avg" style="height:50px"></div>
+                  <div class="modal-bar-lbl">최하</div>
+                </div>
+                <div class="modal-bar-group">
+                  <div class="modal-bar avg" style="height:38px"></div>
+                  <div class="modal-bar-lbl">하위</div>
+                </div>
+                <div class="modal-bar-group">
+                  <div class="modal-bar avg" style="height:45px"></div>
+                  <div class="modal-bar-lbl">평균</div>
+                </div>
+                <div class="modal-bar-group">
+                  <div class="modal-bar this" style="height:56px"></div>
+                  <div class="modal-bar-lbl" style="color:#2563EB;font-weight:700;">이 물건</div>
+                </div>
+                <div class="modal-bar-group">
+                  <div class="modal-bar avg" style="height:52px"></div>
+                  <div class="modal-bar-lbl">상위</div>
+                </div>
+                <div class="modal-bar-group">
+                  <div class="modal-bar avg" style="height:60px"></div>
+                  <div class="modal-bar-lbl">최상</div>
+                </div>
+              </div>
+            </div>
+            <div class="modal-verdict-row">
+              <div class="modal-verdict-badge">
+                <div class="modal-verdict-val">✅ 추천</div>
+                <div class="modal-verdict-sub">수익성 우수 물건</div>
+              </div>
+              <div class="modal-percentile">
+                <div class="modal-percentile-val">상위 24%</div>
+                <div class="modal-verdict-sub">전체 지점 대비</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <div class="modal-date">2026.06.12 생성</div>
+            <button class="modal-btn-secondary">닫기</button>
+            <button class="modal-btn-primary">📥 PDF 저장</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE 2 TABLE -->
+<div id="page2" class="section">
+  <div class="section-title">Page 2 — 수익분석표 게시판</div>
+  <div class="section-desc">10년치 지점별 실적 데이터 테이블. 정렬·필터·페이지네이션 포함.</div>
+
+  <div style="max-width:900px;">
+    <div class="mockup">
+      <div class="mockup-topbar"><span></span><span></span><span></span></div>
+      <div class="table-layout">
+        <div class="table-topbar">
+          <div class="table-title">📊 수익분석표 게시판</div>
+          <div class="table-filters">
+            <select class="table-filter"><option>연도: 2025</option><option>2024</option><option>전체</option></select>
+            <input class="table-filter" placeholder="지점명 검색" style="width:120px">
+          </div>
+          <div class="table-actions">
+            <button class="table-btn-gen">🔄 전체 재생성</button>
+            <button class="table-btn-del">🗑 전체 삭제</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>지점명 <span class="sort-icon">↕</span></th>
+                <th>주소 <span class="sort-icon">↕</span></th>
+                <th>기준연월 <span class="sort-icon">▼</span></th>
+                <th>월 매출 <span class="sort-icon">↕</span></th>
+                <th>전기세 <span class="sort-icon">↕</span></th>
+                <th>운영비 <span class="sort-icon">↕</span></th>
+                <th>순수익 <span class="sort-icon">↕</span></th>
+                <th>점유율 <span class="sort-icon">↕</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>강남역점</strong></td>
+                <td>서울 강남구 역삼동 123</td>
+                <td>2025-12</td>
+                <td>9,240,000원</td>
+                <td>380,000원</td>
+                <td>420,000원</td>
+                <td class="positive">5,840,000원</td>
+                <td><span class="pill-occ">82%</span></td>
+              </tr>
+              <tr>
+                <td><strong>홍대입구점</strong></td>
+                <td>서울 마포구 서교동 456</td>
+                <td>2025-12</td>
+                <td>7,810,000원</td>
+                <td>320,000원</td>
+                <td>380,000원</td>
+                <td class="positive">4,510,000원</td>
+                <td><span class="pill-occ">71%</span></td>
+              </tr>
+              <tr>
+                <td><strong>신촌점</strong></td>
+                <td>서울 서대문구 창천동 789</td>
+                <td>2025-12</td>
+                <td>6,540,000원</td>
+                <td>280,000원</td>
+                <td>340,000원</td>
+                <td class="positive">3,420,000원</td>
+                <td><span class="pill-occ">63%</span></td>
+              </tr>
+              <tr>
+                <td><strong>판교점</strong></td>
+                <td>경기 성남시 분당구 백현동</td>
+                <td>2025-12</td>
+                <td>8,920,000원</td>
+                <td>350,000원</td>
+                <td>400,000원</td>
+                <td class="positive">5,370,000원</td>
+                <td><span class="pill-occ">79%</span></td>
+              </tr>
+              <tr>
+                <td><strong>수원역점</strong></td>
+                <td>경기 수원시 팔달구 매산로</td>
+                <td>2025-12</td>
+                <td>5,230,000원</td>
+                <td>240,000원</td>
+                <td>300,000원</td>
+                <td class="positive">2,390,000원</td>
+                <td><span class="pill-occ">54%</span></td>
+              </tr>
+              <tr>
+                <td><strong>인천논현점</strong></td>
+                <td>인천 남동구 논현동 321</td>
+                <td>2025-11</td>
+                <td>4,870,000원</td>
+                <td>210,000원</td>
+                <td>280,000원</td>
+                <td class="positive">2,080,000원</td>
+                <td><span class="pill-occ">49%</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-pagination">
+          <span>총 22,000건 중 1-50 표시</span>
+          <div class="page-btns">
+            <button class="page-btn active">1</button>
+            <button class="page-btn">2</button>
+            <button class="page-btn">3</button>
+            <button class="page-btn">···</button>
+            <button class="page-btn">440</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

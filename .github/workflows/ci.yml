@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Install backend dependencies
+        run: cd fastapi_backend && uv sync
+
+      - name: Run backend tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://testuser:testpass@localhost:5432/testdb
+          SECRET_KEY: ${{ secrets.TEST_SECRET_KEY || 'test-secret-key-for-ci-only-not-for-prod' }}
+          KAKAO_REST_API_KEY: dummy-key-for-tests
+          SIMULATION_ENGINE: rule_based
+        run: cd fastapi_backend && uv run pytest tests/ -v
+
+  test-frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10.7.1"
+
+      - name: Install frontend dependencies
+        run: cd nextjs-frontend && pnpm install
+
+      - name: Type check
+        run: cd nextjs-frontend && pnpm tsc --noEmit
+
+      - name: Build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=400"
+        run: cd nextjs-frontend && pnpm build
