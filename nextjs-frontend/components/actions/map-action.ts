@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { type MapPinsData } from "@/lib/definitions";
 
 export async function fetchMapPins(address: string): Promise<MapPinsData> {
+  if (!address.trim()) return { error: "주소가 비어 있습니다" };
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value;
   if (!token) return { error: "인증이 필요합니다" };

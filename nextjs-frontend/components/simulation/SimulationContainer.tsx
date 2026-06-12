@@ -8,34 +8,59 @@ import SimulationResultCard from "./SimulationResultCard";
 
 const KakaoMapView = dynamic(
   () => import("@/components/map/KakaoMapView"),
-  { ssr: false, loading: () => <div className="flex items-center justify-center h-full bg-dalock-surface"><p className="text-dalock-text2 text-sm">지도 로드 중...</p></div> }
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex items-center justify-center h-full bg-dalock-surface">
+        <p className="text-dalock-text2 text-sm">지도 로드 중...</p>
+      </div>
+    ),
+  }
 );
+
+type MapRequest = { address: string; seq: number };
 
 export default function SimulationContainer() {
   const [result, setResult] = useState<SimulationResultData | null>(null);
   const [resultVersion, setResultVersion] = useState(0);
-  const [mapAddress, setMapAddress] = useState<string | null>(null);
+
+  // Map fetch state — seq counter prevents same-address re-submit skip
+  const [mapRequest, setMapRequest] = useState<MapRequest | null>(null);
+  const [mapLoading, setMapLoading] = useState(false);
   const [mapTarget, setMapTarget] = useState<{ latitude: number; longitude: number } | null>(null);
   const [mapPins, setMapPins] = useState<BranchPinData[]>([]);
+  const [mapError, setMapError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!mapAddress) return;
-    fetchMapPins(mapAddress).then((data: MapPinsData) => {
+    if (!mapRequest) return;
+    let cancelled = false;
+    setMapLoading(true);
+    setMapError(null);
+    fetchMapPins(mapRequest.address).then((data: MapPinsData) => {
+      if (cancelled) return;
+      setMapLoading(false);
       if ("error" in data) {
         setMapTarget(null);
         setMapPins([]);
+        setMapError(data.error);
       } else {
         setMapTarget(data.target);
         setMapPins(data.pins);
       }
     });
-  }, [mapAddress]);
+    return () => {
+      cancelled = true;
+    };
+  }, [mapRequest]);
 
   function handleResult(r: SimulationResultData, address: string) {
     setResult(r);
     setResultVersion((v) => v + 1);
-    setMapAddress(address);
+    // seq always increments → same-address re-submit still triggers new fetch
+    setMapRequest((prev) => ({ address, seq: (prev?.seq ?? 0) + 1 }));
   }
+
+  const showMap = !mapLoading && mapRequest !== null;
 
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-56px)]">
@@ -47,21 +72,29 @@ export default function SimulationContainer() {
 
       {/* Right panel — map + result overlay */}
       <div className="relative flex-1 bg-dalock-surface min-h-[300px]">
-        {mapAddress ? (
-          <KakaoMapView
-            address={mapAddress}
-            target={mapTarget}
-            pins={mapPins}
-          />
-        ) : (
+        {mapLoading && (
           <div className="flex items-center justify-center h-full">
-            <p className="text-dalock-text2 text-sm">주소를 입력하고 시뮬레이션을 실행하세요</p>
+            <p className="text-dalock-text2 text-sm">지도 로드 중...</p>
           </div>
         )}
 
-        {/* Result card overlay — bottom-right of map */}
+        {showMap ? (
+          <KakaoMapView
+            key={resultVersion}
+            address={mapRequest.address}
+            target={mapTarget}
+            pins={mapPins}
+            error={mapError}
+          />
+        ) : !mapLoading ? (
+          <div className="flex items-center justify-center h-full">
+            <p className="text-dalock-text2 text-sm">주소를 입력하고 시뮬레이션을 실행하세요</p>
+          </div>
+        ) : null}
+
+        {/* Result card overlay — fixed size with mobile-safe max-w */}
         {result && (
-          <div className="absolute bottom-4 right-4 w-72 max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl shadow-xl bg-white">
+          <div className="absolute bottom-4 right-4 w-72 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl shadow-xl bg-white">
             <SimulationResultCard key={resultVersion} result={result} />
           </div>
         )}
