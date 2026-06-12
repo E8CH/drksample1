@@ -36,6 +36,8 @@ export default function ProposalModal({ open, onClose, result, input }: Props) {
     try {
       const filename = generatePdfFilename(input.address);
       await downloadProposalPDF(docRef.current, filename);
+    } catch {
+      alert("PDF 저장 중 오류가 발생했습니다. 다시 시도해 주세요.");
     } finally {
       setDownloading(false);
     }
@@ -46,9 +48,10 @@ export default function ProposalModal({ open, onClose, result, input }: Props) {
       {/* 오프스크린 ProposalDocument — html2canvas 캡처 타겟 */}
       <div
         ref={docRef}
+        aria-hidden="true"
         style={{ position: "fixed", top: 0, left: "-9999px", width: "794px", zIndex: -1 }}
       >
-        {open && <ProposalDocument result={result} input={input} />}
+        <ProposalDocument result={result} input={input} />
       </div>
 
       <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>

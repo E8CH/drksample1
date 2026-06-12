@@ -1,6 +1,6 @@
 # Story 3.3: PDF 다운로드
 
-Status: review
+Status: done
 
 ## Story
 
@@ -64,6 +64,18 @@ So that 이 파일을 제안 자료로 즉시 활용할 수 있다.
 
 - [x] Task 5: TypeScript 타입 검사 및 검증
   - [x] `cd nextjs-frontend && npx tsc --noEmit` — 오류 없음
+
+### Review Findings (AI)
+
+- [x] [Review][Patch] SVG key collision — `<g key={entry.name}>` 중복 이름 시 React DOM 오류 [ProposalDocument.tsx]
+- [x] [Review][Patch] PDF 다중 페이지 없음 — pdfHeight > A4(297mm) 시 콘텐츠 클리핑 [lib/pdf.ts]
+- [x] [Review][Patch] html2canvas 실패 시 사용자 피드백 없음 — catch 없어 오류 무시됨 [ProposalModal.tsx]
+- [x] [Review][Patch] Canvas 0-dimension NaN 가드 없음 — canvas.width=0 시 pdfHeight=NaN [lib/pdf.ts]
+- [x] [Review][Patch] `open &&` 조건부 마운트 — ref null 타이밍 갭 가능, 항상 렌더링으로 수정 [ProposalModal.tsx]
+- [x] [Review][Patch] 오프스크린 div aria-hidden 누락 — 스크린리더 중복 접근성 트리 노출 [ProposalModal.tsx]
+- [x] [Review][Patch] sanitizeFilename 빈 결과 폴백 없음 — 특수문자만 있는 주소 시 "_" 반환 [lib/pdf.ts]
+- [x] [Review][Defer] today() 함수 중복 정의 (ProposalModal.tsx, ProposalDocument.tsx) — deferred, 리팩토링 범위
+- [x] [Review][Defer] 이모지 "🏠" html2canvas 렌더링 위험 — deferred, 플랫폼 의존적, 스펙 의도적 포함
 
 ## Dev Notes
 
@@ -332,6 +344,7 @@ _(구현 중 추가)_
 - `ProposalDocument.tsx`: 794px 고정 너비, 인라인 스타일 사용(Tailwind 클래스 대신 off-screen 렌더링 안정성 확보). ComparisonSvgChart 인라인 SVG 구현 — Recharts 완전 배제(ARCH-7 준수)
 - `ProposalModal.tsx`: docRef(off-screen 컨테이너) + downloading state + handleDownload(try/finally). PDF 저장 버튼: aria-busy, disabled, "저장 중..." 로딩 텍스트(AC5/UX-DR14)
 - `npx tsc --noEmit` — 오류 없음
+- **CR 패치 (7개):** SVG key 인덱스 복합키 적용, PDF 다중페이지 지원, canvas 0-dimension 가드, handleDownload catch+alert, open&& 제거(항상 렌더링), aria-hidden 추가, sanitizeFilename 빈 결과 폴백
 
 ## File List
 
@@ -346,3 +359,4 @@ _(구현 중 추가)_
 
 - 2026-06-13: Story 3-3 CS 생성. html2canvas + jsPDF 클라이언트 사이드 PDF. ProposalDocument(순수 SVG 차트)로 Recharts 캡처 충돌 방지. ProposalModal에 PDF 저장 버튼 추가.
 - 2026-06-13: Story 3-3 DS 완료. lib/pdf.ts, ProposalDocument.tsx 신규 생성. ProposalModal.tsx PDF 저장 버튼 추가. tsc --noEmit 통과. Status → review.
+- 2026-06-13: Story 3-3 CR 완료. 7 patches 적용 (SVG key, PDF multipage, canvas guard, catch+alert, open&&제거, aria-hidden, sanitize fallback). 2 defer. 8 dismiss. Status → done.

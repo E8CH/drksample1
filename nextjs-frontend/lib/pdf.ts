@@ -2,7 +2,8 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 export function sanitizeFilename(address: string): string {
-  return address.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 50);
+  const sanitized = address.replace(/[\\/:*?"<>|]/g, "_").replace(/\s+/g, "_").slice(0, 50);
+  return sanitized.replace(/^_+$/, "") || "주소없음";
 }
 
 export function generatePdfFilename(address: string): string {
@@ -22,6 +23,9 @@ export async function downloadProposalPDF(
     logging: false,
     backgroundColor: "#ffffff",
   });
+  if (!canvas.width || !canvas.height) {
+    throw new Error("PDF 캡처 실패: 콘텐츠를 렌더링할 수 없습니다.");
+  }
   const imgData = canvas.toDataURL("image/png");
   const pdf = new jsPDF({
     orientation: "portrait",
@@ -29,7 +33,19 @@ export async function downloadProposalPDF(
     format: "a4",
   });
   const pdfWidth = pdf.internal.pageSize.getWidth();
+  const pdfPageHeight = pdf.internal.pageSize.getHeight();
   const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-  pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+  if (pdfHeight <= pdfPageHeight) {
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+  } else {
+    let pageOffset = 0;
+    let remainingHeight = pdfHeight;
+    while (remainingHeight > 0) {
+      pdf.addImage(imgData, "PNG", 0, -pageOffset, pdfWidth, pdfHeight);
+      remainingHeight -= pdfPageHeight;
+      pageOffset += pdfPageHeight;
+      if (remainingHeight > 0) pdf.addPage();
+    }
+  }
   pdf.save(filename);
 }

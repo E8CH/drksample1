@@ -47,7 +47,7 @@ function ComparisonSvgChart({
         const y = chartHeight - barH;
         const label = entry.name.length > 5 ? entry.name.slice(0, 5) + "…" : entry.name;
         return (
-          <g key={entry.name}>
+          <g key={`${entry.name}-${i}`}>
             <rect
               x={x}
               y={y}

@@ -1,3 +1,8 @@
+## Deferred from: code review of 3-3-pdf-다운로드 (2026-06-13)
+
+- D1: today() 함수 중복 정의 (ProposalModal.tsx, ProposalDocument.tsx) — 리팩토링으로 공유 유틸 이동 권장; 기능 영향 없음
+- D2: 이모지 "🏠" html2canvas 렌더링 위험 — 플랫폼/브라우저 따라 emoji 렌더링 불안정 가능; 스펙 의도적 포함이므로 운영 모니터링 권장
+
 ## Deferred from: code review of 3-2-제안서-팝업-비교-차트 (2026-06-12)
 
 - D1: setMapLoading(false) 취소 경로 미호출 [SimulationContainer.tsx] — pre-existing Story 3-1, 쾌속 재제출 시 무한 스피너 가능
