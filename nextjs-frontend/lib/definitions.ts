@@ -54,6 +54,16 @@ export const simulationInputSchema = z.object({
 
 export type SimulationInput = z.infer<typeof simulationInputSchema>;
 
+export type SimulationResultData = {
+  estimated_monthly_revenue: number;
+  occupancy_rate: number;
+  net_profit: number;
+  percentile: number;
+  verdict: "추천" | "검토필요" | "비추천";
+  similar_branch_count: number;
+  fallback_used: boolean;
+};
+
 export const itemSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().min(1, { message: "Description is required" }),
