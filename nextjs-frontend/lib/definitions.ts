@@ -64,6 +64,17 @@ export type SimulationResultData = {
   fallback_used: boolean;
 };
 
+export type BranchPinData = {
+  branch_name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+};
+
+export type MapPinsData =
+  | { target: { latitude: number; longitude: number }; pins: BranchPinData[] }
+  | { error: string };
+
 export const itemSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().min(1, { message: "Description is required" }),

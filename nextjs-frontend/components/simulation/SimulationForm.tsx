@@ -57,7 +57,7 @@ function inputClass(error?: string) {
 }
 
 type Props = {
-  onResult?: (result: SimulationResultData) => void;
+  onResult?: (result: SimulationResultData, address: string) => void;
 };
 
 export default function SimulationForm({ onResult }: Props) {
@@ -125,7 +125,7 @@ export default function SimulationForm({ onResult }: Props) {
         if (res.error) {
           setServerError(res.error);
         } else if (res.result) {
-          onResult?.(res.result);
+          onResult?.(res.result, parsed.data.address);
         } else {
           setServerError("알 수 없는 오류가 발생했습니다");
         }

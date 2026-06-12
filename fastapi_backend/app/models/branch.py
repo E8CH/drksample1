@@ -13,3 +13,5 @@ class Branch(Base):
     building_usage = Column(Text, nullable=True)
     ev_charging = Column(Boolean, default=False, server_default="false")
     parking_count = Column(Integer, default=0, server_default="0")
+    latitude = Column(Numeric, nullable=True)
+    longitude = Column(Numeric, nullable=True)

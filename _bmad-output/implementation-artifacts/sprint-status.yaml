@@ -59,8 +59,8 @@ development_status:
   epic-2-retrospective: optional
 
   # ─── Epic 3: 지도 시각화 & 제안서 PDF 출력 ───────────────────────
-  epic-3: backlog
-  3-1-카카오맵-지도-시각화: backlog
+  epic-3: in-progress
+  3-1-카카오맵-지도-시각화: in-progress
   3-2-제안서-팝업-비교-차트: backlog
   3-3-pdf-다운로드: backlog
   epic-3-retrospective: optional

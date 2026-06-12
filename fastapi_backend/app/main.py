@@ -7,6 +7,7 @@ from .utils import simple_generate_unique_route_id
 from app.routes.auth import router as custom_auth_router
 from app.routes.items import router as items_router
 from app.routes.simulation import router as simulation_router
+from app.routes.map import router as map_router
 from app.config import settings
 
 app = FastAPI(
@@ -58,6 +59,9 @@ app.include_router(items_router, prefix="/items")
 
 # Include simulation routes
 app.include_router(simulation_router)
+
+# Include map routes
+app.include_router(map_router)
 
 add_pagination(app)
 
