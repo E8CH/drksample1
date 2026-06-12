@@ -1,6 +1,6 @@
 # Story 3.3: PDF 다운로드
 
-Status: ready-for-dev
+Status: review
 
 ## Story
 
@@ -22,48 +22,48 @@ So that 이 파일을 제안 자료로 즉시 활용할 수 있다.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: 패키지 설치
-  - [ ] `cd nextjs-frontend && npm install html2canvas jspdf`
-  - [ ] html2canvas v1.4.x + jspdf v2.5.x 설치 확인 (둘 다 TypeScript 타입 내장)
+- [x] Task 1: 패키지 설치
+  - [x] `cd nextjs-frontend && npm install html2canvas jspdf`
+  - [x] html2canvas v1.4.x + jspdf v2.5.x 설치 확인 (둘 다 TypeScript 타입 내장)
 
-- [ ] Task 2: PDF 생성 유틸리티 (lib/pdf.ts)
-  - [ ] `nextjs-frontend/lib/pdf.ts` 신규 생성
-  - [ ] `downloadProposalPDF(element: HTMLElement, filename: string): Promise<void>` 함수
-  - [ ] html2canvas `{ scale: 2, useCORS: true, logging: false }` 옵션
-  - [ ] jsPDF `{ orientation: "portrait", unit: "mm", format: "a4" }` 설정
-  - [ ] canvas → A4 전체 너비로 이미지 삽입 (`pdfWidth = pdf.internal.pageSize.getWidth()`)
-  - [ ] `sanitizeFilename(address: string): string` 함수 — `[\\/:*?"<>|]` → `_`, 50자 제한
-  - [ ] `generatePdfFilename(address: string): string` 함수 — `수익분석제안서_{주소}_{YYYY-MM-DD}.pdf`
+- [x] Task 2: PDF 생성 유틸리티 (lib/pdf.ts)
+  - [x] `nextjs-frontend/lib/pdf.ts` 신규 생성
+  - [x] `downloadProposalPDF(element: HTMLElement, filename: string): Promise<void>` 함수
+  - [x] html2canvas `{ scale: 2, useCORS: true, logging: false }` 옵션
+  - [x] jsPDF `{ orientation: "portrait", unit: "mm", format: "a4" }` 설정
+  - [x] canvas → A4 전체 너비로 이미지 삽입 (`pdfWidth = pdf.internal.pageSize.getWidth()`)
+  - [x] `sanitizeFilename(address: string): string` 함수 — `[\\/:*?"<>|]` → `_`, 50자 제한
+  - [x] `generatePdfFilename(address: string): string` 함수 — `수익분석제안서_{주소}_{YYYY-MM-DD}.pdf`
 
-- [ ] Task 3: ProposalDocument 컴포넌트 신규 생성 (PDF 캡처 전용)
-  - [ ] `nextjs-frontend/components/proposal/ProposalDocument.tsx` 신규 생성 (`"use client"`)
-  - [ ] Props: `result: SimulationResultData`, `input: SimulationInput`
-  - [ ] 고정 너비 794px (A4 96dpi 기준), 배경 흰색, Pretendard 폰트
-  - [ ] 헤더: "🏠 다락 (Dalock)" + "수익분석 제안서" + 날짜
-  - [ ] 물건 정보 섹션 (ProposalModal과 동일 데이터, 같은 포맷)
-  - [ ] 수치 도표: 3열 grid (예상 월매출/점유율/순수익 카드)
-  - [ ] 순수 SVG 바 차트 — Recharts 금지, `ComparisonSvgChart` 인라인 서브컴포넌트
-  - [ ] 판정 배지 (인라인 span, VerdictBadge import 가능)
-  - [ ] `comparison_data.length === 0` 시 SVG 차트 섹션 숨김
-  - [ ] `fallback_used === true` 시 경고 텍스트 표시
+- [x] Task 3: ProposalDocument 컴포넌트 신규 생성 (PDF 캡처 전용)
+  - [x] `nextjs-frontend/components/proposal/ProposalDocument.tsx` 신규 생성 (`"use client"`)
+  - [x] Props: `result: SimulationResultData`, `input: SimulationInput`
+  - [x] 고정 너비 794px (A4 96dpi 기준), 배경 흰색, Pretendard 폰트
+  - [x] 헤더: "🏠 다락 (Dalock)" + "수익분석 제안서" + 날짜
+  - [x] 물건 정보 섹션 (ProposalModal과 동일 데이터, 같은 포맷)
+  - [x] 수치 도표: 3열 grid (예상 월매출/점유율/순수익 카드)
+  - [x] 순수 SVG 바 차트 — Recharts 금지, `ComparisonSvgChart` 인라인 서브컴포넌트
+  - [x] 판정 배지 (인라인 span, VerdictBadge import 가능)
+  - [x] `comparison_data.length === 0` 시 SVG 차트 섹션 숨김
+  - [x] `fallback_used === true` 시 경고 텍스트 표시
 
-- [ ] Task 4: ProposalModal에 PDF 저장 버튼 추가
-  - [ ] `nextjs-frontend/components/proposal/ProposalModal.tsx` 수정
-  - [ ] `useRef<HTMLDivElement>(null)` (docRef) 추가
-  - [ ] `useState<boolean>(false)` (downloading) 추가
-  - [ ] 모달 JSX 외부에 오프스크린 컨테이너 추가:
+- [x] Task 4: ProposalModal에 PDF 저장 버튼 추가
+  - [x] `nextjs-frontend/components/proposal/ProposalModal.tsx` 수정
+  - [x] `useRef<HTMLDivElement>(null)` (docRef) 추가
+  - [x] `useState<boolean>(false)` (downloading) 추가
+  - [x] 모달 JSX 외부에 오프스크린 컨테이너 추가:
     ```tsx
     <div ref={docRef} style={{ position: "fixed", top: 0, left: "-9999px", width: "794px", zIndex: -1 }}>
       {open && <ProposalDocument result={result} input={input} />}
     </div>
     ```
-  - [ ] `handleDownload()` 함수: `await document.fonts.ready` → `downloadProposalPDF(docRef.current, filename)`
-  - [ ] 하단 "닫기" 버튼 왼쪽에 "PDF 저장" 버튼 추가 (Primary 스타일)
-  - [ ] downloading 중 버튼 `disabled` + "저장 중..." 텍스트 (스피너 선택)
-  - [ ] try/finally로 downloading 상태 항상 해제
+  - [x] `handleDownload()` 함수: `await document.fonts.ready` → `downloadProposalPDF(docRef.current, filename)`
+  - [x] 하단 "닫기" 버튼 왼쪽에 "PDF 저장" 버튼 추가 (Primary 스타일)
+  - [x] downloading 중 버튼 `disabled` + "저장 중..." 텍스트 (스피너 선택)
+  - [x] try/finally로 downloading 상태 항상 해제
 
-- [ ] Task 5: TypeScript 타입 검사 및 검증
-  - [ ] `cd nextjs-frontend && npx tsc --noEmit` — 오류 없음
+- [x] Task 5: TypeScript 타입 검사 및 검증
+  - [x] `cd nextjs-frontend && npx tsc --noEmit` — 오류 없음
 
 ## Dev Notes
 
@@ -327,7 +327,11 @@ _(구현 중 추가)_
 
 ### Completion Notes
 
-_(구현 완료 후 추가)_
+- html2canvas v1.4.1 + jsPDF v4.2.1 설치 (jsPDF v4는 default export 유지, API 호환)
+- `lib/pdf.ts`: sanitizeFilename / generatePdfFilename / downloadProposalPDF 구현. `document.fonts.ready` await로 Pretendard 완전 로드 후 캡처. scale:2, backgroundColor:"#ffffff"
+- `ProposalDocument.tsx`: 794px 고정 너비, 인라인 스타일 사용(Tailwind 클래스 대신 off-screen 렌더링 안정성 확보). ComparisonSvgChart 인라인 SVG 구현 — Recharts 완전 배제(ARCH-7 준수)
+- `ProposalModal.tsx`: docRef(off-screen 컨테이너) + downloading state + handleDownload(try/finally). PDF 저장 버튼: aria-busy, disabled, "저장 중..." 로딩 텍스트(AC5/UX-DR14)
+- `npx tsc --noEmit` — 오류 없음
 
 ## File List
 
@@ -341,3 +345,4 @@ _(구현 완료 후 추가)_
 ## Change Log
 
 - 2026-06-13: Story 3-3 CS 생성. html2canvas + jsPDF 클라이언트 사이드 PDF. ProposalDocument(순수 SVG 차트)로 Recharts 캡처 충돌 방지. ProposalModal에 PDF 저장 버튼 추가.
+- 2026-06-13: Story 3-3 DS 완료. lib/pdf.ts, ProposalDocument.tsx 신규 생성. ProposalModal.tsx PDF 저장 버튼 추가. tsc --noEmit 통과. Status → review.

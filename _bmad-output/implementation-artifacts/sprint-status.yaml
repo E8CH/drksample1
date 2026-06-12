@@ -62,7 +62,7 @@ development_status:
   epic-3: in-progress
   3-1-카카오맵-지도-시각화: done
   3-2-제안서-팝업-비교-차트: done
-  3-3-pdf-다운로드: ready-for-dev
+  3-3-pdf-다운로드: review
   epic-3-retrospective: optional
 
   # ─── Epic 4: 수익분석표 게시판 & 데이터 관리 ─────────────────────

@@ -1,4 +1,5 @@
 "use client";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   type SimulationResultData,
@@ -6,6 +7,8 @@ import {
 } from "@/lib/definitions";
 import VerdictBadge from "@/components/simulation/VerdictBadge";
 import ComparisonBarChart from "@/components/simulation/ComparisonBarChart";
+import ProposalDocument from "./ProposalDocument";
+import { downloadProposalPDF, generatePdfFilename } from "@/lib/pdf";
 
 type Props = {
   open: boolean;
@@ -24,8 +27,31 @@ function today() {
 }
 
 export default function ProposalModal({ open, onClose, result, input }: Props) {
+  const docRef = useRef<HTMLDivElement>(null);
+  const [downloading, setDownloading] = useState(false);
+
+  async function handleDownload() {
+    if (!docRef.current) return;
+    setDownloading(true);
+    try {
+      const filename = generatePdfFilename(input.address);
+      await downloadProposalPDF(docRef.current, filename);
+    } finally {
+      setDownloading(false);
+    }
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+    <>
+      {/* 오프스크린 ProposalDocument — html2canvas 캡처 타겟 */}
+      <div
+        ref={docRef}
+        style={{ position: "fixed", top: 0, left: "-9999px", width: "794px", zIndex: -1 }}
+      >
+        {open && <ProposalDocument result={result} input={input} />}
+      </div>
+
+      <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent
         className="max-w-[680px] w-[90vw] max-h-[90vh] overflow-y-auto flex flex-col gap-0 p-0"
         onInteractOutside={(e) => e.preventDefault()}
@@ -148,14 +174,25 @@ export default function ProposalModal({ open, onClose, result, input }: Props) {
         {/* 하단 */}
         <div className="flex items-center justify-between px-6 py-4 border-t border-dalock-border">
           <span className="text-xs text-dalock-text2">{today()}</span>
-          <button
-            onClick={onClose}
-            className="px-4 py-2 text-sm rounded-md border border-dalock-border text-dalock-text1 hover:bg-dalock-surface transition-colors"
-          >
-            닫기
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleDownload}
+              disabled={downloading}
+              aria-busy={downloading}
+              className="px-4 py-2 text-sm rounded-md bg-dalock-primary text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {downloading ? "저장 중..." : "PDF 저장"}
+            </button>
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm rounded-md border border-dalock-border text-dalock-text1 hover:bg-dalock-surface transition-colors"
+            >
+              닫기
+            </button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 }
