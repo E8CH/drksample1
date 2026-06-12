@@ -1,6 +1,6 @@
 "use client";
 import { useState, useTransition } from "react";
-import { simulationInputSchema } from "@/lib/definitions";
+import { simulationInputSchema, type SimulationResultData } from "@/lib/definitions";
 import { runSimulation } from "@/components/actions/simulation-action";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,7 +56,11 @@ function inputClass(error?: string) {
   return error ? "border-dalock-danger focus-visible:ring-dalock-danger" : "";
 }
 
-export default function SimulationForm() {
+type Props = {
+  onResult?: (result: SimulationResultData) => void;
+};
+
+export default function SimulationForm({ onResult }: Props) {
   const [isPending, startTransition] = useTransition();
   const [values, setValues] = useState<FieldValues>(INITIAL_VALUES);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -117,7 +121,11 @@ export default function SimulationForm() {
 
     startTransition(() => {
       runSimulation(parsed.data).then((res) => {
-        if (res.error) setServerError(res.error);
+        if (res.error) {
+          setServerError(res.error);
+        } else if (res.result) {
+          onResult?.(res.result);
+        }
       });
     });
   }
