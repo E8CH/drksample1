@@ -1,7 +1,7 @@
-from app.providers.kakao import KakaoMapProvider
+from app.providers.nominatim import NominatimMapProvider
 from app.schemas.map import BranchPin, Coordinates
 
-_provider = KakaoMapProvider()
+_provider = NominatimMapProvider()
 
 
 async def geocode(address: str) -> Coordinates:
