@@ -12,7 +12,7 @@ class KakaoMapProvider(MapProvider):
         headers = {"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
-                f"{self.BASE_URL}/geo/address.json",
+                f"{self.BASE_URL}/search/address.json",
                 params={"query": address},
                 headers=headers,
             )
