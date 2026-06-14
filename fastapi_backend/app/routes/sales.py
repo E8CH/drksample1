@@ -69,8 +69,8 @@ async def list_sales(
                 DATE_TRUNC('month', s.sale_date) AS sale_month,
                 SUM(s.daily_revenue)             AS monthly_revenue
             FROM sales s
-            WHERE (:year::integer IS NULL OR EXTRACT(YEAR FROM s.sale_date) = :year::integer)
-              AND (:branch_name_pattern::text IS NULL OR s.branch_name ILIKE :branch_name_pattern::text)
+            WHERE (CAST(:year AS integer) IS NULL OR EXTRACT(YEAR FROM s.sale_date) = CAST(:year AS integer))
+              AND (CAST(:branch_name_pattern AS text) IS NULL OR s.branch_name ILIKE CAST(:branch_name_pattern AS text))
             GROUP BY s.branch_name, DATE_TRUNC('month', s.sale_date)
         ),
         avg_revenue AS (
