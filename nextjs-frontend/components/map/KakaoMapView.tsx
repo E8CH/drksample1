@@ -51,7 +51,7 @@ export default function KakaoMapView({ address, target, pins, error }: Props) {
     <div
       role="region"
       aria-label="카카오맵 — 분석 위치 및 인근 지점 표시"
-      className={`h-full w-full transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
+      className={`h-full w-full isolate transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
     >
       <MapContainer
         center={center}

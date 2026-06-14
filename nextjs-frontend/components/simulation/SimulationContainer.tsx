@@ -97,7 +97,7 @@ export default function SimulationContainer() {
 
         {/* Result card overlay — fixed size with mobile-safe max-w */}
         {result && (
-          <div className="absolute bottom-4 right-4 w-72 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl shadow-xl bg-white">
+          <div className="absolute bottom-4 right-4 w-72 max-w-[calc(100%-2rem)] max-h-[calc(100%-2rem)] overflow-y-auto rounded-xl shadow-xl bg-white z-[1000]">
             <SimulationResultCard
               key={resultVersion}
               result={result}
