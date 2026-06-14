@@ -1,0 +1,15 @@
+FROM node:20-bookworm
+
+WORKDIR /app
+
+RUN npm install -g pnpm
+
+COPY nextjs-frontend/package.json nextjs-frontend/pnpm-lock.yaml ./
+RUN pnpm install --frozen-lockfile
+
+COPY nextjs-frontend/ .
+
+RUN pnpm build --webpack
+
+EXPOSE 3000
+CMD pnpm start -- -p ${PORT:-3000}
