@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
@@ -7,7 +8,9 @@ import {
   type ColumnDef,
 } from "@tanstack/react-table";
 import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { type SalesRow } from "@/lib/definitions";
+import { generateData, checkGenerationStatus } from "@/actions/data";
 
 type Props = {
   data: SalesRow[];
@@ -45,6 +48,41 @@ export default function BranchDataTable({
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
+
+  const hasActiveFilters = !!(searchParams.get("year") || searchParams.get("branch_name"));
+
+  const [isEmptyGenerating, setIsEmptyGenerating] = useState(false);
+  const emptyPollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (!isEmptyGenerating) return;
+    emptyPollingRef.current = setInterval(async () => {
+      const { status } = await checkGenerationStatus();
+      if (status === "idle") {
+        clearInterval(emptyPollingRef.current!);
+        emptyPollingRef.current = null;
+        setIsEmptyGenerating(false);
+        toast.success("데이터 재생성이 완료되었습니다", { duration: 3000 });
+        router.refresh();
+      }
+    }, 2000);
+    return () => {
+      if (emptyPollingRef.current) clearInterval(emptyPollingRef.current);
+    };
+  }, [isEmptyGenerating, router]);
+
+  async function handleEmptyStateGenerate() {
+    const result = await generateData();
+    if (!result.success) {
+      toast.error(
+        result.error === "already_running"
+          ? "이미 재생성이 진행 중입니다"
+          : "재생성 요청에 실패했습니다"
+      );
+      return;
+    }
+    setIsEmptyGenerating(true);
+  }
 
   const totalPages = Math.ceil(total / limit);
 
@@ -193,7 +231,20 @@ export default function BranchDataTable({
                   colSpan={columns.length}
                   className="px-4 py-16 text-center text-dalock-text2"
                 >
-                  데이터가 없습니다
+                  {!hasActiveFilters ? (
+                    <div className="flex flex-col items-center gap-4">
+                      <p>데이터가 없습니다. 전체 재생성 버튼을 눌러주세요.</p>
+                      <button
+                        onClick={handleEmptyStateGenerate}
+                        disabled={isEmptyGenerating}
+                        className="h-9 px-4 text-sm rounded-md bg-dalock-primary text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      >
+                        {isEmptyGenerating ? "재생성 중..." : "전체 재생성"}
+                      </button>
+                    </div>
+                  ) : (
+                    <p>검색 결과가 없습니다.</p>
+                  )}
                 </td>
               </tr>
             ) : (

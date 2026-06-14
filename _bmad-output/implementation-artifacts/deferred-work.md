@@ -1,3 +1,22 @@
+## Deferred from: code review of 4-3-가상-데이터-전체-삭제-빈-상태-ui (2026-06-14)
+
+- D1: `isDeleting=true` unmount leak — `handleConfirmDelete` awaits Server Action; if user navigates away mid-flight, `setIsDeleting(false)` + `router.refresh()` still fire on stale ref. React 18 suppresses the state-update warning; `router.refresh()` on stale ref causes spurious reload on next page. Admin-only tool, single user — low real impact [`nextjs-frontend/components/board/TableToolbar.tsx:92-103`]
+- D2: `asyncpg` errors unhandled in `delete_all_data` — DB failure raises untyped exception → FastAPI returns generic 500. Admin sees "삭제 요청에 실패했습니다" with no distinction between DB-down vs partial failure. Transactional so DB is clean on failure; idempotent retry safe [`fastapi_backend/app/services/data_generator.py:164-177`]
+- D3: `DELETE /data/all` returns HTTP 200 + body vs REST convention 204 No Content — frontend checks `res.ok`, so semantically equivalent. Clean-up in future API consistency pass [`fastapi_backend/app/routes/data.py:44-48`]
+- D4: Double-polling structural issue — `TableToolbar` (`isGenerating`) and `BranchDataTable` (`isEmptyGenerating`) each own independent polling loops with no shared state. Low-probability race: both active simultaneously → double toast + double `router.refresh()`. Fix: lift generation state to shared context or parent prop [`nextjs-frontend/components/board/`]
+- D5: AC1 confirm button label is "삭제" (implementation) vs spec wording "확인/취소 버튼" — "삭제" is better UX for a destructive-action dialog. Not a functional gap [`nextjs-frontend/components/board/TableToolbar.tsx:217`]
+- D6: `deleteAllData()` Server Action no timeout — slow DB (large table) causes button stuck in "삭제 중..." indefinitely. `AbortSignal.timeout(30_000)` + frontend error handling would improve UX. Admin tool, transactional safe [`nextjs-frontend/actions/data.ts:43-47`]
+
+## Deferred from: code review of 4-2-가상-데이터-전체-재생성 (2026-06-14)
+
+- D1: `checkGenerationStatus` returns `"idle"` on backend crash — triggers false-success toast without distinguishing completion from failure [`nextjs-frontend/actions/data.ts:33-35`] — POC 단일 인스턴스 허용
+- D2: Year dropdown shows 2026 (currentYear) with no data — `sales_2026` partition 없음, pre-existing from Story 4-1 [`nextjs-frontend/components/board/TableToolbar.tsx:22-25`]
+- D3: `asyncio.sleep(0)` yields between branches but `_generate_*` runs synchronously — event loop starvation risk [`fastapi_backend/app/services/data_generator.py:155`] — POC acceptable
+- D4: AC5 UI-only protection — second browser tab sees active button; backend 409 prevents actual duplicate runs [`nextjs-frontend/components/board/TableToolbar.tsx:133`] — POC single-admin
+- D5: No timeout guard on `generate_all_data` — FR-8 (30s) / AC3 (60s) are guidelines, not enforced [`fastapi_backend/app/services/data_generator.py`]
+- D6: Test cleanup race in `test_generate_authenticated` — background task may still run after `_STATUS` reset [`fastapi_backend/tests/test_data.py:37`] — CI DB 필요 패턴과 동일
+- D7: AC3 toast lost if user navigates away from board page during polling [`nextjs-frontend/components/board/TableToolbar.tsx:39-52`] — POC limitation
+
 ## Deferred from: code review of 4-1-수익분석표-게시판-정렬-필터 (2026-06-12)
 
 - D1: f-string SQL ORDER BY 구성 — sort_col/order_dir는 Literal 타입 검증 통과 값이므로 현재는 안전; 향후 allowlist 변경 시 injection 위험, text()+bindparams 패턴으로 교체 권장 [fastapi_backend/app/routes/sales.py]
