@@ -42,16 +42,10 @@ export default function KakaoMapView({ address, target, pins, error }: Props) {
     []
   );
 
-  if (!target) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full bg-dalock-surface gap-2">
-        {error && (
-          <p className="text-dalock-danger text-sm">지오코딩 실패: 주소를 확인해 주세요</p>
-        )}
-        <p className="text-dalock-text2 text-sm">주소: {address}</p>
-      </div>
-    );
-  }
+  // 서울 기본 좌표 — target 없을 때 Leaflet이 미리 초기화되도록 항상 MapContainer 렌더
+  const center: [number, number] = target
+    ? [target.latitude, target.longitude]
+    : [37.5665, 126.978];
 
   return (
     <div
@@ -60,8 +54,8 @@ export default function KakaoMapView({ address, target, pins, error }: Props) {
       className={`h-full w-full transition-opacity duration-300 ${visible ? "opacity-100" : "opacity-0"}`}
     >
       <MapContainer
-        center={[target.latitude, target.longitude]}
-        zoom={15}
+        center={center}
+        zoom={target ? 15 : 11}
         style={{ height: "100%", width: "100%" }}
         zoomControl={true}
       >
@@ -69,19 +63,31 @@ export default function KakaoMapView({ address, target, pins, error }: Props) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
-        <Marker position={[target.latitude, target.longitude]} icon={targetIcon}>
-          <Popup>분석 대상 위치</Popup>
-        </Marker>
-        {pins.map((pin) => (
-          <Marker
-            key={`${pin.branch_name}-${pin.latitude}-${pin.longitude}`}
-            position={[pin.latitude, pin.longitude]}
-            icon={branchIcon}
-          >
-            <Popup>{pin.branch_name}</Popup>
-          </Marker>
-        ))}
+        {target && (
+          <>
+            <Marker position={[target.latitude, target.longitude]} icon={targetIcon}>
+              <Popup>분석 대상 위치</Popup>
+            </Marker>
+            {pins.map((pin) => (
+              <Marker
+                key={`${pin.branch_name}-${pin.latitude}-${pin.longitude}`}
+                position={[pin.latitude, pin.longitude]}
+                icon={branchIcon}
+              >
+                <Popup>{pin.branch_name}</Popup>
+              </Marker>
+            ))}
+          </>
+        )}
       </MapContainer>
+      {!target && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-dalock-surface/80 gap-2 pointer-events-none">
+          {error && (
+            <p className="text-dalock-danger text-sm">지오코딩 실패: 주소를 확인해 주세요</p>
+          )}
+          {error && <p className="text-dalock-text2 text-sm">주소: {address}</p>}
+        </div>
+      )}
     </div>
   );
 }
