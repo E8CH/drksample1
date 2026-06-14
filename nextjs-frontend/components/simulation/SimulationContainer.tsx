@@ -70,8 +70,6 @@ export default function SimulationContainer() {
     setMapRequest((prev) => ({ address: input.address, seq: (prev?.seq ?? 0) + 1 }));
   }
 
-  const showMap = !mapLoading && mapRequest !== null;
-
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-56px)]">
       {/* Left panel — input form */}
@@ -82,25 +80,20 @@ export default function SimulationContainer() {
 
       {/* Right panel — map + result overlay */}
       <div className="relative flex-1 bg-dalock-surface min-h-[300px]">
-        {mapLoading && (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-dalock-text2 text-sm">지도 로드 중...</p>
-          </div>
-        )}
-
-        {showMap ? (
-          <KakaoMapView
-            key={resultVersion}
-            address={mapRequest.address}
-            target={mapTarget}
-            pins={mapPins}
-            error={mapError}
-          />
-        ) : !mapLoading ? (
+        {mapRequest === null ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-dalock-text2 text-sm">주소를 입력하고 시뮬레이션을 실행하세요</p>
           </div>
-        ) : null}
+        ) : (
+          // 항상 마운트 — Leaflet이 지도 데이터 도착 전에 초기화되어 모달 간섭 방지
+          <KakaoMapView
+            key={resultVersion}
+            address={mapRequest.address}
+            target={mapLoading ? null : mapTarget}
+            pins={mapLoading ? [] : mapPins}
+            error={mapLoading ? null : mapError}
+          />
+        )}
 
         {/* Result card overlay — fixed size with mobile-safe max-w */}
         {result && (
