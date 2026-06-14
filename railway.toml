@@ -1,53 +1,7 @@
 [build]
-builder = "nixpacks"
+builder = "DOCKERFILE"
+dockerfilePath = "fastapi_backend/Dockerfile"
+buildContext = "fastapi_backend"
 
-[[services]]
-name = "fastapi-backend"
-source = "fastapi_backend"
-
-  [services.build]
-  build_command = "pip install uv && uv sync"
-
-  [services.deploy]
-  start_command = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
-  pre_deploy_command = "alembic upgrade head"
-
-  [[services.variables]]
-  name = "DATABASE_URL"
-  value = "${{PostgreSQL.DATABASE_URL}}"
-
-  [[services.variables]]
-  name = "SECRET_KEY"
-  value = "${{SECRET_KEY}}"
-
-  [[services.variables]]
-  name = "KAKAO_REST_API_KEY"
-  value = "${{KAKAO_REST_API_KEY}}"
-
-  [[services.variables]]
-  name = "SIMULATION_ENGINE"
-  value = "rule_based"
-
-  [services.watch_paths]
-  include = ["fastapi_backend/**"]
-
-[[services]]
-name = "nextjs-frontend"
-source = "nextjs-frontend"
-
-  [services.build]
-  build_command = "npm install -g pnpm@10.7.1 && pnpm install && pnpm build"
-
-  [services.deploy]
-  start_command = "pnpm start"
-
-  [[services.variables]]
-  name = "FASTAPI_URL"
-  value = "http://fastapi-backend.railway.internal:8000"
-
-  [[services.variables]]
-  name = "NEXT_PUBLIC_APP_URL"
-  value = "https://${{RAILWAY_PUBLIC_DOMAIN}}"
-
-  [services.watch_paths]
-  include = ["nextjs-frontend/**"]
+[deploy]
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
