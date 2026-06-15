@@ -1,6 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
-import { type MapPinsData } from "@/lib/definitions";
+import { type MapPinsData, type BuildingInfoData } from "@/lib/definitions";
 
 export async function fetchMapPins(address: string): Promise<MapPinsData> {
   if (!address.trim()) return { error: "주소가 비어 있습니다" };
@@ -28,4 +28,31 @@ export async function fetchMapPins(address: string): Promise<MapPinsData> {
   const data = await res.json();
   if (!data?.target) return { error: "지도 응답 형식 오류" };
   return { target: data.target, pins: data.pins ?? [] };
+}
+
+export async function fetchBuildingInfo(address: string): Promise<BuildingInfoData> {
+  if (!address.trim()) return { error: "주소가 비어 있습니다" };
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token) return { error: "인증이 필요합니다" };
+
+  const apiUrl = process.env.API_URL ?? "http://localhost:8000";
+  const url = `${apiUrl}/building/info?address=${encodeURIComponent(address)}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Cookie: `access_token=${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { error: "건물 정보 서버 연결에 실패했습니다" };
+  }
+
+  if (res.status === 401) return { error: "인증이 만료되었습니다" };
+  if (res.status === 404) return { error: "건물 정보를 찾을 수 없습니다" };
+  if (res.status === 503) return { error: "건물 API 미설정" };
+  if (!res.ok) return { error: "건물 정보 로드 실패" };
+
+  return res.json();
 }

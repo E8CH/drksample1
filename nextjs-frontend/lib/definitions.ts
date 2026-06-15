@@ -99,6 +99,31 @@ export type MapPinsData =
   | { target: { latitude: number; longitude: number }; pins: BranchPinData[] }
   | { error: string };
 
+export type BuildingUnit = {
+  ho: string;
+  floor: string;
+  purpose: string;
+  exclusive_sqm: number;
+  exclusive_py: number;
+  common_sqm: number;
+};
+
+export type BuildingInfoData =
+  | {
+      found: true;
+      road_address: string;
+      jibun_address: string;
+      building_name: string;
+      total_floors: number;
+      underground_floors: number;
+      total_area_sqm: number;
+      total_units: number;
+      main_purpose: string;
+      units: BuildingUnit[];
+    }
+  | { found: false; road_address: string; jibun_address: string }
+  | { error: string };
+
 export const itemSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().min(1, { message: "Description is required" }),

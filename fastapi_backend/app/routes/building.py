@@ -1,0 +1,176 @@
+import logging
+from collections import defaultdict
+
+import httpx
+import jwt
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query
+
+from app.config import settings
+
+router = APIRouter(prefix="/building", tags=["building"])
+logger = logging.getLogger(__name__)
+
+JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
+BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
+
+
+async def require_admin(access_token: str | None = Cookie(None)) -> str:
+    if not access_token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    try:
+        payload = jwt.decode(
+            access_token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["exp", "sub"]},
+        )
+        return str(payload["sub"])
+    except jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+def _items_as_list(raw) -> list:
+    if not raw:
+        return []
+    if isinstance(raw, dict):
+        return [raw]
+    return raw
+
+
+@router.get("/info")
+async def get_building_info(
+    address: str = Query(..., min_length=1),
+    _: str = Depends(require_admin),
+) -> dict:
+    if not settings.JUSO_API_KEY or not settings.BUILDING_API_KEY:
+        raise HTTPException(status_code=503, detail="건물 정보 API 키가 설정되지 않았습니다")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Step 1: Juso API — 주소 → admCd + 지번
+        try:
+            juso_resp = await client.get(
+                JUSO_URL,
+                params={
+                    "confmKey": settings.JUSO_API_KEY,
+                    "currentPage": 1,
+                    "countPerPage": 1,
+                    "keyword": address,
+                    "resultType": "json",
+                },
+            )
+            juso_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.warning("Juso API error: %s", e)
+            raise HTTPException(status_code=502, detail="주소 검색 API 오류")
+
+        juso_data = juso_resp.json()
+        error_code = juso_data.get("results", {}).get("common", {}).get("errorCode", "0")
+        if error_code != "0":
+            raise HTTPException(status_code=502, detail="주소 API 오류: " + error_code)
+
+        juso_list = juso_data.get("results", {}).get("juso") or []
+        if not juso_list:
+            raise HTTPException(status_code=404, detail="주소를 찾을 수 없습니다")
+
+        j = juso_list[0]
+        adm_cd: str = j.get("admCd", "")
+        if len(adm_cd) != 10:
+            raise HTTPException(status_code=422, detail="행정구역코드 형식 오류")
+
+        sigungu_cd = adm_cd[:5]
+        bjdong_cd = adm_cd[5:]
+        bun = str(j.get("lnbrMnnm") or "0").zfill(4)
+        ji = str(j.get("lnbrSlno") or "0").zfill(4)
+
+        bld_params = {
+            "serviceKey": settings.BUILDING_API_KEY,
+            "sigunguCd": sigungu_cd,
+            "bjdongCd": bjdong_cd,
+            "bun": bun,
+            "ji": ji,
+            "numOfRows": 10,
+            "_type": "json",
+        }
+
+        # Step 2: 건축물대장 기본개요
+        try:
+            title_resp = await client.get(f"{BLDRGST_BASE}/getBrTitleInfo", params=bld_params)
+            title_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.warning("BldRgst title API error: %s", e)
+            raise HTTPException(status_code=502, detail="건축물대장 API 오류")
+
+        title_raw = title_resp.json()
+        title_items = _items_as_list(
+            title_raw.get("response", {}).get("body", {}).get("items", {}).get("item")
+        )
+
+        if not title_items:
+            return {
+                "found": False,
+                "road_address": j.get("roadAddrPart1", address),
+                "jibun_address": j.get("jibunAddr", ""),
+            }
+
+        # 집합건물 표제부 우선, 없으면 첫 번째
+        title = next(
+            (t for t in title_items if "표제부" in (t.get("regstrKindCdNm") or "")),
+            title_items[0],
+        )
+
+        # Step 3: 호수별 전유/공용 면적
+        expo_params = {**bld_params, "numOfRows": 500}
+        try:
+            expo_resp = await client.get(
+                f"{BLDRGST_BASE}/getBrExposPubuseAreaInfo", params=expo_params
+            )
+            expo_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.warning("BldRgst expo API error: %s", e)
+            expo_items = []
+        else:
+            expo_raw = expo_resp.json()
+            expo_items = _items_as_list(
+                expo_raw.get("response", {}).get("body", {}).get("items", {}).get("item")
+            )
+
+        # 호수별 집계
+        units: dict = defaultdict(
+            lambda: {"floor": "", "purpose": "", "exclusive_sqm": 0.0, "common_sqm": 0.0}
+        )
+        for item in expo_items:
+            ho = (item.get("hoNm") or "").strip()
+            if not ho:
+                continue
+            units[ho]["floor"] = item.get("flrNoNm", "")
+            units[ho]["purpose"] = item.get("mainPurpsCdNm", "")
+            area = float(item.get("area") or 0)
+            if item.get("exposPubuseGbCdNm") == "전유":
+                units[ho]["exclusive_sqm"] += area
+            else:
+                units[ho]["common_sqm"] += area
+
+        unit_list = [
+            {
+                "ho": ho,
+                "floor": u["floor"],
+                "purpose": u["purpose"],
+                "exclusive_sqm": round(u["exclusive_sqm"], 2),
+                "exclusive_py": round(u["exclusive_sqm"] / 3.3058, 1),
+                "common_sqm": round(u["common_sqm"], 2),
+            }
+            for ho, u in sorted(units.items())
+        ]
+
+        return {
+            "found": True,
+            "road_address": j.get("roadAddrPart1", ""),
+            "jibun_address": j.get("jibunAddr", ""),
+            "building_name": title.get("bldNm") or "",
+            "total_floors": int(title.get("grndFlrCnt") or 0),
+            "underground_floors": int(title.get("ugrndFlrCnt") or 0),
+            "total_area_sqm": float(title.get("totArea") or 0),
+            "total_units": int(title.get("hhldCnt") or len(unit_list)),
+            "main_purpose": title.get("mainPurpsCdNm") or "",
+            "units": unit_list,
+        }

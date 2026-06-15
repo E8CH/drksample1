@@ -6,10 +6,12 @@ import {
   type MapPinsData,
   type BranchPinData,
   type SimulationInput,
+  type BuildingInfoData,
 } from "@/lib/definitions";
-import { fetchMapPins } from "@/components/actions/map-action";
+import { fetchMapPins, fetchBuildingInfo } from "@/components/actions/map-action";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
+import BuildingInfoPanel from "./BuildingInfoPanel";
 import ProposalModal from "@/components/proposal/ProposalModal";
 
 const KakaoMapView = dynamic(
@@ -39,6 +41,11 @@ export default function SimulationContainer() {
   const [mapPins, setMapPins] = useState<BranchPinData[]>([]);
   const [mapError, setMapError] = useState<string | null>(null);
 
+  // Building info state
+  const [buildingRequest, setBuildingRequest] = useState<MapRequest | null>(null);
+  const [buildingLoading, setBuildingLoading] = useState(false);
+  const [buildingInfo, setBuildingInfo] = useState<BuildingInfoData | null>(null);
+
   useEffect(() => {
     if (!mapRequest) return;
     let cancelled = false;
@@ -61,6 +68,21 @@ export default function SimulationContainer() {
     };
   }, [mapRequest]);
 
+  useEffect(() => {
+    if (!buildingRequest) return;
+    let cancelled = false;
+    setBuildingLoading(true);
+    setBuildingInfo(null);
+    fetchBuildingInfo(buildingRequest.address).then((data: BuildingInfoData) => {
+      if (cancelled) return;
+      setBuildingLoading(false);
+      setBuildingInfo(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [buildingRequest]);
+
   function handleResult(r: SimulationResultData, input: SimulationInput) {
     setResult(r);
     setSubmittedInput(input);
@@ -68,14 +90,22 @@ export default function SimulationContainer() {
     setResultVersion((v) => v + 1);
     // seq always increments → same-address re-submit still triggers new fetch
     setMapRequest((prev) => ({ address: input.address, seq: (prev?.seq ?? 0) + 1 }));
+    setBuildingRequest((prev) => ({ address: input.address, seq: (prev?.seq ?? 0) + 1 }));
   }
 
   return (
     <div className="flex flex-col lg:flex-row min-h-[calc(100vh-56px)]">
-      {/* Left panel — input form */}
+      {/* Left panel — input form + building info */}
       <div className="w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-white border-r border-dalock-border p-6 overflow-y-auto">
         <h2 className="text-xl font-semibold text-dalock-text1 mb-6">입지 조건 입력</h2>
         <SimulationForm onResult={handleResult} />
+
+        {(buildingLoading || buildingInfo) && (
+          <div className="mt-6 pt-6 border-t border-dalock-border">
+            <h3 className="text-sm font-semibold text-dalock-text1 mb-3">건물 정보</h3>
+            <BuildingInfoPanel data={buildingInfo} loading={buildingLoading} />
+          </div>
+        )}
       </div>
 
       {/* Right panel — map + result overlay */}

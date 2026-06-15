@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str
     ADMIN_PASSWORD: str
 
+    # 외부 공공 API
+    JUSO_API_KEY: str | None = None
+    BUILDING_API_KEY: str | None = None
+
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 

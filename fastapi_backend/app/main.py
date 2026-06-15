@@ -10,6 +10,7 @@ from app.routes.simulation import router as simulation_router
 from app.routes.map import router as map_router
 from app.routes.sales import router as sales_router
 from app.routes.data import router as data_router
+from app.routes.building import router as building_router
 from app.config import settings
 
 app = FastAPI(
@@ -70,6 +71,9 @@ app.include_router(sales_router)
 
 # Include data management routes
 app.include_router(data_router)
+
+# Include building info routes
+app.include_router(building_router)
 
 add_pagination(app)
 
