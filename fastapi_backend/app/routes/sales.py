@@ -73,26 +73,9 @@ async def list_sales(
               AND (CAST(:branch_name_pattern AS text) IS NULL OR s.branch_name ILIKE CAST(:branch_name_pattern AS text))
             GROUP BY s.branch_name, DATE_TRUNC('month', s.sale_date)
         ),
-        avg_revenue AS (
-            SELECT sale_month, AVG(monthly_revenue) AS avg_rev
-            FROM monthly_stats
-            GROUP BY sale_month
-        )
     """
 
-    count_sql = text(
-        base_cte
-        + """
-        SELECT COUNT(*) AS total
-        FROM monthly_stats ms
-        JOIN branches b  ON b.branch_name = ms.branch_name
-        JOIN avg_revenue ar ON ar.sale_month = ms.sale_month
-        LEFT JOIN operations o
-            ON o.branch_name = ms.branch_name
-           AND o.month       = ms.sale_month
-        """
-    )
-
+    # COUNT(*) OVER() 윈도우 함수로 count+data를 단일 쿼리로 처리
     data_sql = text(
         base_cte
         + f"""
@@ -109,12 +92,15 @@ async def list_sales(
                 - COALESCE(o.operating_cost, 0)
             )::float                                AS net_profit,
             COALESCE(
-                ROUND(ms.monthly_revenue / NULLIF(ar.avg_rev, 0) * 100, 1),
+                ROUND(
+                    COALESCE(o.rented_units, 0)::float / NULLIF(b.total_units, 0) * 100,
+                    1
+                ),
                 0
-            )::float                                AS occupancy_rate
+            )::float                                AS occupancy_rate,
+            COUNT(*) OVER()                         AS total_count
         FROM monthly_stats ms
         JOIN branches b  ON b.branch_name = ms.branch_name
-        JOIN avg_revenue ar ON ar.sale_month = ms.sale_month
         LEFT JOIN operations o
             ON o.branch_name = ms.branch_name
            AND o.month       = ms.sale_month
@@ -123,14 +109,12 @@ async def list_sales(
         """
     )
 
-    count_result = await db.execute(count_sql, params)
-    total = count_result.scalar() or 0
-
     data_result = await db.execute(data_sql, params)
     rows = data_result.mappings().all()
+    total = int(rows[0]["total_count"]) if rows else 0
 
     return SalesListResponse(
-        data=[SalesRow(**row) for row in rows],
+        data=[SalesRow(**{k: v for k, v in row.items() if k != "total_count"}) for row in rows],
         total=total,
         page=page,
         limit=limit,
