@@ -72,7 +72,7 @@ async def list_sales(
             WHERE (CAST(:year AS integer) IS NULL OR EXTRACT(YEAR FROM s.sale_date) = CAST(:year AS integer))
               AND (CAST(:branch_name_pattern AS text) IS NULL OR s.branch_name ILIKE CAST(:branch_name_pattern AS text))
             GROUP BY s.branch_name, DATE_TRUNC('month', s.sale_date)
-        ),
+        )
     """
 
     # COUNT(*) OVER() 윈도우 함수로 count+data를 단일 쿼리로 처리
