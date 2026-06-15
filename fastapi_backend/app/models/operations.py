@@ -10,3 +10,4 @@ class Operation(Base):
     month = Column(Date, nullable=False)
     electricity_fee = Column(Numeric, nullable=True)
     operating_cost = Column(Numeric, nullable=True)
+    rented_units = Column(Integer, nullable=True)

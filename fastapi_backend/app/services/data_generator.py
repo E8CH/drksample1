@@ -53,9 +53,11 @@ def _generate_branches() -> list[tuple]:
             ev_charging = random.random() < 0.3
             parking_count = random.randint(0, 20)
             address = f"가상 {region_name} 테스트로 {random.randint(1, 200)}"
+            # 유닛 수: 면적 기준 (3.5~5.5㎡/유닛), 최소 10개
+            total_units = max(10, int(area_sqm / random.uniform(3.5, 5.5)))
             records.append((
                 branch_name, address, area_sqm, monthly_rent, maintenance_fee,
-                building_usage, ev_charging, parking_count, lat, lon,
+                building_usage, ev_charging, parking_count, lat, lon, total_units,
             ))
     return records
 
@@ -73,18 +75,22 @@ def _generate_members(branches: list[tuple]) -> list[tuple]:
     return records
 
 
-def _generate_operations(branch_name: str) -> list[tuple]:
-    """지점의 2016-01 ~ 2025-12 월별 운영비 120개"""
+def _generate_operations(branch_name: str, total_units: int) -> list[tuple]:
+    """지점의 2016-01 ~ 2025-12 월별 운영비 + 임대 유닛 수 120개"""
     records = []
     base_monthly_revenue = random.uniform(3_000_000, 15_000_000)
+    base_occupancy = random.uniform(0.50, 0.75)
     for year in range(2016, 2026):
         growth = 1.03 ** (year - 2016)
+        occ_growth = 1.015 ** (year - 2016)
         for month in range(1, 13):
             monthly_rev = base_monthly_revenue * growth * random.uniform(0.85, 1.15)
             electricity_fee = round(monthly_rev * random.uniform(0.12, 0.18))
             operating_cost = round(monthly_rev * random.uniform(0.08, 0.14))
+            occ_rate = min(0.97, base_occupancy * occ_growth * random.uniform(0.92, 1.08))
+            rented_units = max(1, min(total_units, round(total_units * occ_rate)))
             month_date = date(year, month, 1)
-            records.append((branch_name, month_date, electricity_fee, operating_cost))
+            records.append((branch_name, month_date, electricity_fee, operating_cost, rented_units))
     return records
 
 
@@ -124,8 +130,8 @@ async def generate_all_data() -> None:
             await conn.executemany(
                 "INSERT INTO branches"
                 " (branch_name, address, area_sqm, monthly_rent, maintenance_fee,"
-                "  building_usage, ev_charging, parking_count, latitude, longitude)"
-                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+                "  building_usage, ev_charging, parking_count, latitude, longitude, total_units)"
+                " VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
                 branches,
             )
 
@@ -137,18 +143,18 @@ async def generate_all_data() -> None:
             )
 
             # 4. 지점별 청크: operations COPY + sales COPY (메모리 최적화)
-            branch_member_map: dict[str, list[str]] = {}
+            branch_member_map: dict[str, tuple[list[str], int]] = {}
             for idx, b in enumerate(branches):
-                branch_member_map[b[0]] = [members[idx * 5 + j][0] for j in range(5)]
+                branch_member_map[b[0]] = ([members[idx * 5 + j][0] for j in range(5)], b[10])
 
-            for branch_name in branch_member_map:
-                op_records = _generate_operations(branch_name)
+            for branch_name, (member_emails, total_units) in branch_member_map.items():
+                op_records = _generate_operations(branch_name, total_units)
                 await conn.copy_records_to_table(
                     "operations",
                     records=op_records,
-                    columns=["branch_name", "month", "electricity_fee", "operating_cost"],
+                    columns=["branch_name", "month", "electricity_fee", "operating_cost", "rented_units"],
                 )
-                sales_records = _generate_sales(branch_name, branch_member_map[branch_name])
+                sales_records = _generate_sales(branch_name, member_emails)
                 await conn.copy_records_to_table(
                     "sales",
                     records=sales_records,

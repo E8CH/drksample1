@@ -26,6 +26,8 @@ class _BranchMetrics(NamedTuple):
     address: str
     avg_monthly_revenue: float
     avg_ops_cost: float
+    total_units: int
+    avg_rented_units: float
 
 
 def extract_gu(address: str) -> str:
@@ -97,6 +99,7 @@ async def _fetch_metrics(db: AsyncSession, branch_names: list[str]) -> list[_Bra
             func.avg(
                 func.coalesce(Operation.electricity_fee, 0) + func.coalesce(Operation.operating_cost, 0)
             ).label("avg_ops"),
+            func.avg(Operation.rented_units).label("avg_rented"),
         )
         .where(Operation.branch_name.in_(branch_names))
         .group_by(Operation.branch_name)
@@ -109,8 +112,10 @@ async def _fetch_metrics(db: AsyncSession, branch_names: list[str]) -> list[_Bra
             Branch.area_sqm,
             Branch.monthly_rent,
             Branch.address,
+            Branch.total_units,
             func.coalesce(avg_rev_sq.c.avg_rev, 0.0).label("avg_rev"),
             func.coalesce(avg_ops_sq.c.avg_ops, 0.0).label("avg_ops"),
+            func.coalesce(avg_ops_sq.c.avg_rented, 0.0).label("avg_rented"),
         )
         .select_from(Branch)
         .outerjoin(avg_rev_sq, Branch.branch_name == avg_rev_sq.c.branch_name)
@@ -127,13 +132,15 @@ async def _fetch_metrics(db: AsyncSession, branch_names: list[str]) -> list[_Bra
             address=row.address or "",
             avg_monthly_revenue=float(row.avg_rev or 0),
             avg_ops_cost=float(row.avg_ops or 0),
+            total_units=int(row.total_units or 0),
+            avg_rented_units=float(row.avg_rented or 0),
         )
         for row in result.all()
     ]
 
 
-def _weighted_average(metrics: list[_BranchMetrics], gu: str, location: LocationConditions) -> tuple[float, float, float]:
-    """Return (weighted_revenue, weighted_ops_cost, total_weight)."""
+def _weighted_average(metrics: list[_BranchMetrics], gu: str, location: LocationConditions) -> tuple[float, float, float, float | None]:
+    """Return (weighted_revenue, weighted_ops_cost, total_weight, weighted_occupancy_rate_pct)."""
     pairs: list[tuple[_BranchMetrics, float]] = []
     for m in metrics:
         area_sim = max(0.0, 1.0 - abs(m.area_sqm - location.area_sqm) / max(location.area_sqm, 1.0))
@@ -146,7 +153,18 @@ def _weighted_average(metrics: list[_BranchMetrics], gu: str, location: Location
     total_w = sum(w for _, w in pairs)
     weighted_rev = sum(m.avg_monthly_revenue * w for m, w in pairs) / total_w
     weighted_ops = sum(m.avg_ops_cost * w for m, w in pairs) / total_w
-    return weighted_rev, weighted_ops, total_w
+
+    # Real occupancy rate from actual rented/total unit counts
+    valid_occ = [(m, w) for m, w in pairs if m.total_units > 0 and m.avg_rented_units > 0]
+    if valid_occ:
+        valid_w = sum(w for _, w in valid_occ)
+        weighted_occ: float | None = (
+            sum((m.avg_rented_units / m.total_units) * w for m, w in valid_occ) / valid_w * 100.0
+        )
+    else:
+        weighted_occ = None
+
+    return weighted_rev, weighted_ops, total_w, weighted_occ
 
 
 def _default_estimate(location: LocationConditions) -> SimulationResult:
@@ -211,7 +229,7 @@ class RuleBasedEngine(SimulationEngine):
         if not effective:
             return _default_estimate(location)
 
-        weighted_rev, weighted_ops, _ = _weighted_average(effective, gu, location)
+        weighted_rev, weighted_ops, _, weighted_occ = _weighted_average(effective, gu, location)
 
         # Guard against zero/negative revenue (all branches have no sales data)
         if weighted_rev <= 0:
@@ -220,9 +238,12 @@ class RuleBasedEngine(SimulationEngine):
         if location.ev_charging:
             weighted_rev *= EV_CORRECTION
 
-        # Occupancy rate: fraction of theoretical max revenue (2× monthly rent = full occupancy).
-        # At revenue = 2×rent → ~100% (capped at 99); revenue = 1×rent → ~50%.
-        occupancy_rate = min(99.0, max(0.0, weighted_rev / max(location.monthly_rent * 2.0, 1.0) * 100.0))
+        # Occupancy rate: use real rented/total unit ratio when available;
+        # fall back to revenue proxy (revenue / 2×rent) if unit data is missing.
+        if weighted_occ is not None:
+            occupancy_rate = min(99.0, max(0.0, weighted_occ))
+        else:
+            occupancy_rate = min(99.0, max(0.0, weighted_rev / max(location.monthly_rent * 2.0, 1.0) * 100.0))
 
         # Net profit: revenue minus all monthly costs for this location.
         # weighted_ops covers peer branches' electricity + operating costs (not rent, which is separate).

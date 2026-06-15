@@ -15,3 +15,4 @@ class Branch(Base):
     parking_count = Column(Integer, default=0, server_default="0")
     latitude = Column(Numeric, nullable=True)
     longitude = Column(Numeric, nullable=True)
+    total_units = Column(Integer, nullable=True)
