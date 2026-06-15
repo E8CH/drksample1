@@ -1,4 +1,5 @@
 import logging
+import time
 from collections import defaultdict
 
 import httpx
@@ -13,6 +14,44 @@ logger = logging.getLogger(__name__)
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
 JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
+
+# ── 캐시: 주소 → 결과 (24h TTL, 최대 200개 항목) ──────────────────────────
+_CACHE_TTL = 86400
+_CACHE_MAX = 200
+_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _cache_get(key: str) -> dict | None:
+    entry = _cache.get(key)
+    if entry and time.time() - entry[0] < _CACHE_TTL:
+        return entry[1]
+    _cache.pop(key, None)
+    return None
+
+
+def _cache_set(key: str, value: dict) -> None:
+    if len(_cache) >= _CACHE_MAX:
+        # 가장 오래된 항목 제거
+        oldest = min(_cache, key=lambda k: _cache[k][0])
+        del _cache[oldest]
+    _cache[key] = (time.time(), value)
+
+
+# ── Rate limiter: 건축물대장 외부 API 분당 최대 5회 ────────────────────────
+_EXT_RATE_LIMIT = 5  # calls per minute
+_ext_call_times: list[float] = []
+
+
+def _check_rate_limit() -> None:
+    now = time.time()
+    _ext_call_times[:] = [t for t in _ext_call_times if now - t < 60]
+    if len(_ext_call_times) >= _EXT_RATE_LIMIT:
+        wait_sec = int(60 - (now - _ext_call_times[0])) + 1
+        raise HTTPException(
+            status_code=429,
+            detail=f"건축물대장 API 호출 한도 초과 — {wait_sec}초 후 다시 시도하세요",
+        )
+    _ext_call_times.append(now)
 
 
 async def require_admin(access_token: str | None = Cookie(None)) -> str:
@@ -45,6 +84,15 @@ async def get_building_info(
 ) -> dict:
     if not settings.JUSO_API_KEY or not settings.BUILDING_API_KEY:
         raise HTTPException(status_code=503, detail="건물 정보 API 키가 설정되지 않았습니다")
+
+    cache_key = address.strip().lower()
+    cached = _cache_get(cache_key)
+    if cached:
+        logger.info("Building cache hit: %s", address)
+        return cached
+
+    # 캐시 미스 시에만 외부 API 호출 — rate limit 체크
+    _check_rate_limit()
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         # Step 1: Juso API — 주소 → admCd + 지번
@@ -134,11 +182,13 @@ async def get_building_info(
         )
 
         if not title_items:
-            return {
+            result = {
                 "found": False,
                 "road_address": j.get("roadAddrPart1", address),
                 "jibun_address": j.get("jibunAddr", ""),
             }
+            _cache_set(cache_key, result)
+            return result
 
         # 집합건물 표제부 우선, 없으면 첫 번째
         title = next(
@@ -190,7 +240,7 @@ async def get_building_info(
             for ho, u in sorted(units.items())
         ]
 
-        return {
+        result = {
             "found": True,
             "road_address": j.get("roadAddrPart1", ""),
             "jibun_address": j.get("jibunAddr", ""),
@@ -204,3 +254,5 @@ async def get_building_info(
             "main_purpose": title.get("mainPurpsCdNm") or "",
             "units": unit_list,
         }
+        _cache_set(cache_key, result)
+        return result
