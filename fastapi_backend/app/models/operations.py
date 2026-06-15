@@ -1,4 +1,4 @@
-from sqlalchemy import Column, BigInteger, Text, Date, Numeric, ForeignKey
+from sqlalchemy import Column, BigInteger, Integer, Text, Date, Numeric, ForeignKey
 from .user import Base
 
 
