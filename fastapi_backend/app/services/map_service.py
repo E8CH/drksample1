@@ -1,11 +1,21 @@
+import logging
+
 from app.providers.kakao import KakaoMapProvider
+from app.providers.nominatim import NominatimMapProvider
 from app.schemas.map import BranchPin, Coordinates
 
-_provider = KakaoMapProvider()
+_kakao = KakaoMapProvider()
+_nominatim = NominatimMapProvider()
+
+logger = logging.getLogger(__name__)
 
 
 async def geocode(address: str) -> Coordinates:
-    return await _provider.geocode(address)
+    try:
+        return await _kakao.geocode(address)
+    except Exception as e:
+        logger.warning("Kakao geocoding failed (%s), falling back to Nominatim", e)
+        return await _nominatim.geocode(address)
 
 
 async def get_nearby_branches(
