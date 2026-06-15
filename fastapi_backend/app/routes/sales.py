@@ -93,7 +93,7 @@ async def list_sales(
             )::float                                AS net_profit,
             COALESCE(
                 ROUND(
-                    COALESCE(o.rented_units, 0)::float / NULLIF(b.total_units, 0) * 100,
+                    (COALESCE(o.rented_units, 0)::numeric / NULLIF(b.total_units, 0) * 100),
                     1
                 ),
                 0
