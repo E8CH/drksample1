@@ -11,6 +11,7 @@ class KakaoMapProvider(MapProvider):
     async def geocode(self, address: str) -> Coordinates:
         headers = {"Authorization": f"KakaoAK {settings.KAKAO_REST_API_KEY}"}
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1차: 주소 검색
             resp = await client.get(
                 f"{self.BASE_URL}/search/address.json",
                 params={"query": address},
@@ -18,6 +19,17 @@ class KakaoMapProvider(MapProvider):
             )
             resp.raise_for_status()
             docs = resp.json().get("documents", [])
+
+            # 2차 폴백: 키워드 검색
+            if not docs:
+                resp2 = await client.get(
+                    f"{self.BASE_URL}/search/keyword.json",
+                    params={"query": address, "size": 1},
+                    headers=headers,
+                )
+                resp2.raise_for_status()
+                docs = resp2.json().get("documents", [])
+
             if not docs:
                 raise ValueError(f"주소 '{address}'에 대한 지오코딩 결과 없음")
             return Coordinates(
