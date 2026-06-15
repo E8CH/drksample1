@@ -11,6 +11,7 @@ router = APIRouter(prefix="/building", tags=["building"])
 logger = logging.getLogger(__name__)
 
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
+JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
 
 
@@ -81,6 +82,33 @@ async def get_building_info(
         bjdong_cd = adm_cd[5:]
         bun = str(j.get("lnbrMnnm") or "0").zfill(4)
         ji = str(j.get("lnbrSlno") or "0").zfill(4)
+
+        # Step 1-b: Juso 좌표 API — 같은 key로 위경도 획득
+        coord_lat: float | None = None
+        coord_lon: float | None = None
+        try:
+            coord_resp = await client.get(
+                JUSO_COORD_URL,
+                params={
+                    "confmKey": settings.JUSO_API_KEY,
+                    "admCd": adm_cd,
+                    "rnMgtSn": j.get("rnMgtSn", ""),
+                    "udrtYn": j.get("udrtYn", "0"),
+                    "buldMnnm": j.get("buldMnnm", 0),
+                    "buldSlno": j.get("buldSlno", 0),
+                    "resultType": "json",
+                },
+            )
+            coord_data = coord_resp.json()
+            coord_juso = coord_data.get("results", {}).get("juso") or []
+            if coord_juso:
+                coord_lat = float(coord_juso[0].get("lat") or 0) or None
+                coord_lon = float(coord_juso[0].get("lon") or 0) or None
+                logger.info("Juso coord OK: lat=%s lon=%s", coord_lat, coord_lon)
+            else:
+                logger.warning("Juso coord: 결과 없음 응답=%s", str(coord_data)[:200])
+        except Exception as e:
+            logger.warning("Juso coord API 실패: %s", e)
 
         bld_params = {
             "serviceKey": settings.BUILDING_API_KEY,
@@ -166,6 +194,8 @@ async def get_building_info(
             "found": True,
             "road_address": j.get("roadAddrPart1", ""),
             "jibun_address": j.get("jibunAddr", ""),
+            "latitude": coord_lat,
+            "longitude": coord_lon,
             "building_name": title.get("bldNm") or "",
             "total_floors": int(title.get("grndFlrCnt") or 0),
             "underground_floors": int(title.get("ugrndFlrCnt") or 0),
