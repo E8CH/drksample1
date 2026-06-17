@@ -9,7 +9,8 @@ import {
   type BuildingInfoData,
   type LandInfoData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchBuildingInfo, fetchLandInfo } from "@/components/actions/map-action";
+import { fetchMapPins, fetchBuildingInfo } from "@/components/actions/map-action";
+import { fetchLandInfo } from "@/lib/vworld-client";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
