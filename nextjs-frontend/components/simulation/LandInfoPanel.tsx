@@ -54,13 +54,15 @@ export default function LandInfoPanel({ data, loading }: Props) {
             <span className="text-xs font-normal text-dalock-text2">/㎡</span>
           </p>
         </div>
-        <div className="bg-dalock-surface rounded-lg p-3">
-          <p className="text-xs text-dalock-text2">토지면적</p>
-          <p className="text-sm font-semibold mt-0.5 text-dalock-text1">
-            {data.land_area_sqm.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
-            <span className="text-xs font-normal text-dalock-text2">㎡</span>
-          </p>
-        </div>
+        {data.land_area_sqm > 0 && (
+          <div className="bg-dalock-surface rounded-lg p-3">
+            <p className="text-xs text-dalock-text2">토지면적</p>
+            <p className="text-sm font-semibold mt-0.5 text-dalock-text1">
+              {data.land_area_sqm.toLocaleString("ko-KR", { maximumFractionDigits: 0 })}
+              <span className="text-xs font-normal text-dalock-text2">㎡</span>
+            </p>
+          </div>
+        )}
       </div>
 
       {data.land_type && (
