@@ -14,8 +14,9 @@ logger = logging.getLogger(__name__)
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
 JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
-VWORLD_2D_DATA = "https://api.vworld.kr/req/data"
+VWORLD_NED_WFS = "https://api.vworld.kr/ned/wfs/getIndvdLandPriceWFS"
 VWORLD_NED_ATTR = "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
+VWORLD_TYPENAME = "dt_d150"
 _LAND_BBOX_DELTA = 0.0003  # ~30m
 
 # ── 캐시: 주소 → 결과 (24h TTL, 최대 200개 항목) ──────────────────────────
@@ -271,49 +272,60 @@ async def get_land_info(
         raise HTTPException(status_code=503, detail="VWORLD API 키가 설정되지 않았습니다")
 
     d = _LAND_BBOX_DELTA
-    geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
+    # NED WFS EPSG:4326 bbox 순서: ymin,xmin,ymax,xmax (lat,lon)
+    bbox = f"{lat - d},{lon - d},{lat + d},{lon + d},EPSG:4326"
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        # Step 1: VWORLD 2D Data API → 필지 폴리곤 + 현재 공시지가
+        # Step 1: VWORLD NED WFS → 필지 폴리곤 + 현재 공시지가
+        wfs_params = {
+            "SERVICE": "WFS",
+            "VERSION": "2.0.0",
+            "REQUEST": "GetFeature",
+            "TYPENAMES": VWORLD_TYPENAME,
+            "bbox": bbox,
+            "srsName": "EPSG:4326",
+            "count": 1,
+            "key": settings.VWORLD_API_KEY,
+        }
+
+        polygon_geojson = None
+        pnu = ""
+        current_price = 0
+        std_year = ""
+        land_area = 0.0
+        land_type = ""
+
         try:
-            data_resp = await client.get(
-                VWORLD_2D_DATA,
-                params={
-                    "service": "data",
-                    "version": "2.0",
-                    "request": "GetFeature",
-                    "data": "LP_PA_CBND_BUBUN",
-                    "geomFilter": geom_filter,
-                    "crs": "EPSG:4326",
-                    "format": "json",
-                    "size": 1,
-                    "key": settings.VWORLD_API_KEY,
-                },
+            # JSON 출력 시도
+            json_resp = await client.get(
+                VWORLD_NED_WFS,
+                params={**wfs_params, "outputFormat": "application/json"},
             )
-            data_resp.raise_for_status()
+            ct = json_resp.headers.get("content-type", "")
+            if json_resp.status_code == 200 and "json" in ct:
+                data = json_resp.json()
+                features = data.get("features", [])
+                if features:
+                    f = features[0]
+                    props = f.get("properties", {})
+                    pnu = str(props.get("pnu", "") or "")
+                    current_price = int(props.get("indvdLandPc", 0) or 0)
+                    std_year = str(props.get("stdrYear", "") or "")
+                    land_area = float(props.get("lndpclAr", 0) or 0)
+                    land_type = str(props.get("lndcgrCodeNm", "") or "")
+                    polygon_geojson = f.get("geometry")
+            else:
+                # GML 파싱 폴백
+                gml_resp = await client.get(VWORLD_NED_WFS, params=wfs_params)
+                if gml_resp.status_code == 200:
+                    polygon_geojson, pnu, current_price, std_year, land_area, land_type = (
+                        _parse_ned_gml(gml_resp.text)
+                    )
         except httpx.HTTPError as e:
-            logger.warning("VWORLD 2D Data API 오류: %s", e)
-            raise HTTPException(status_code=502, detail="VWORLD 데이터 API 오류")
+            logger.warning("VWORLD NED WFS 오류: %s", e)
 
-        resp_json = data_resp.json()
-        features = (
-            resp_json.get("response", {})
-            .get("result", {})
-            .get("featureCollection", {})
-            .get("features", [])
-        )
-
-        if not features:
+        if not pnu and polygon_geojson is None:
             raise HTTPException(status_code=404, detail="해당 위치의 필지 정보가 없습니다")
-
-        feature = features[0]
-        props = feature.get("properties", {})
-        pnu: str = str(props.get("pnu", "") or "")
-        current_price = int(props.get("indvdLandPc", 0) or 0)
-        std_year = str(props.get("stdrYear", "") or "")
-        land_area = float(props.get("lndpclAr", 0) or 0)
-        land_type = str(props.get("lndcgrCodeNm", "") or "")
-        polygon_geojson = feature.get("geometry")
 
         # Step 2: NED Attr API → 연도별 공시지가 히스토리
         price_history: list[dict] = []
@@ -321,28 +333,24 @@ async def get_land_info(
             try:
                 attr_resp = await client.get(
                     VWORLD_NED_ATTR,
-                    params={
-                        "pnu": pnu,
-                        "format": "json",
-                        "key": settings.VWORLD_API_KEY,
-                    },
+                    params={"pnu": pnu, "format": "json", "key": settings.VWORLD_API_KEY},
                 )
-                attr_resp.raise_for_status()
-                attr_data = attr_resp.json()
-                raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
-                if isinstance(raw_items, dict):
-                    raw_items = [raw_items]
-                price_history = sorted(
-                    [
-                        {
-                            "year": int(item.get("stdrYear", 0)),
-                            "price_per_sqm": int(item.get("indvdLandPc", 0) or 0),
-                        }
-                        for item in raw_items
-                        if item.get("stdrYear")
-                    ],
-                    key=lambda x: x["year"],
-                )
+                if attr_resp.status_code == 200:
+                    attr_data = attr_resp.json()
+                    raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
+                    if isinstance(raw_items, dict):
+                        raw_items = [raw_items]
+                    price_history = sorted(
+                        [
+                            {
+                                "year": int(item.get("stdrYear", 0)),
+                                "price_per_sqm": int(item.get("indvdLandPc", 0) or 0),
+                            }
+                            for item in raw_items
+                            if item.get("stdrYear")
+                        ],
+                        key=lambda x: x["year"],
+                    )
             except Exception as e:
                 logger.warning("공시지가 히스토리 조회 실패: %s", e)
 
@@ -355,3 +363,41 @@ async def get_land_info(
             "polygon": polygon_geojson,
             "price_history": price_history,
         }
+
+
+def _parse_ned_gml(xml_text: str) -> tuple:
+    """NED WFS GML2 응답 파싱 → (polygon_geojson, pnu, price, year, area, land_type)"""
+    import re
+
+    try:
+        def _extract(tag: str) -> str:
+            m = re.search(rf"<[^:>]+:{tag}[^>]*>([^<]+)</", xml_text)
+            return m.group(1).strip() if m else ""
+
+        pnu = _extract("pnu")
+        price = int(_extract("indvdLandPc") or 0)
+        year = _extract("stdrYear")
+        area_s = _extract("lndpclAr")
+        area = float(area_s) if area_s else 0.0
+        land_type = _extract("lndcgrCodeNm")
+
+        # GML2 <gml:coordinates>: "lon,lat lon,lat ..."
+        coord_m = re.search(r"<gml:coordinates[^>]*>([^<]+)</gml:coordinates>", xml_text)
+        if coord_m:
+            pairs = [p.split(",") for p in coord_m.group(1).strip().split() if "," in p]
+            coords = [[float(p[0]), float(p[1])] for p in pairs if len(p) == 2]
+            if coords:
+                return {"type": "Polygon", "coordinates": [coords]}, pnu, price, year, area, land_type
+
+        # GML3 <gml:posList>: "lat lon lat lon ..." (WFS 2.0 EPSG:4326 axis order)
+        pos_m = re.search(r"<gml:posList[^>]*>([^<]+)</gml:posList>", xml_text)
+        if pos_m:
+            nums = list(map(float, pos_m.group(1).strip().split()))
+            coords = [[nums[i + 1], nums[i]] for i in range(0, len(nums) - 1, 2)]
+            if coords:
+                return {"type": "Polygon", "coordinates": [coords]}, pnu, price, year, area, land_type
+
+        return None, pnu, price, year, area, land_type
+    except Exception as e:
+        logger.warning("GML 파싱 실패: %s", e)
+        return None, "", 0, "", 0.0, ""
