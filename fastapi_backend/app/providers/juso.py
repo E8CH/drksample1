@@ -13,6 +13,29 @@ JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 
 
 class JusoMapProvider(MapProvider):
+    async def get_road_address(self, address: str) -> str | None:
+        """Juso 검색으로 도로명 주소 반환 — coord API 권한 없어도 작동."""
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                JUSO_SEARCH_URL,
+                params={
+                    "confmKey": settings.JUSO_API_KEY,
+                    "currentPage": 1,
+                    "countPerPage": 1,
+                    "keyword": address,
+                    "resultType": "json",
+                },
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            error_code = data.get("results", {}).get("common", {}).get("errorCode", "0")
+            if error_code != "0":
+                return None
+            juso_list = data.get("results", {}).get("juso") or []
+            if not juso_list:
+                return None
+            return juso_list[0].get("roadAddrPart1") or None
+
     async def geocode(self, address: str) -> Coordinates:
         async with httpx.AsyncClient(timeout=10.0) as client:
             # Step 1: 주소 검색 → rnMgtSn, udrtYn, buldMnnm, buldSlno 획득

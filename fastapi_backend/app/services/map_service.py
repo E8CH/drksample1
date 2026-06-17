@@ -24,21 +24,32 @@ async def geocode(address: str) -> Coordinates:
         try:
             return await _kakao.geocode(address)
         except Exception as e:
-            logger.warning("Kakao geocoding failed (%s), trying Juso", e)
+            logger.warning("Kakao geocoding failed (%s), trying Juso+Nominatim", e)
 
-    # 2순위: Juso 좌표 API (키가 coord API까지 승인된 경우)
+    # 2순위: Juso 도로명 주소 조회 → Nominatim (coord API 권한 없어도 작동)
+    # 지번 주소를 도로명으로 변환하면 Nominatim 정확도가 크게 향상됨
+    if settings.JUSO_API_KEY:
+        try:
+            road_addr = await _juso.get_road_address(address)
+            if road_addr:
+                logger.info("Juso road address resolved: %s → %s", address, road_addr)
+                return await _nominatim.geocode(road_addr)
+        except Exception as e:
+            logger.warning("Juso+Nominatim failed (%s), trying VWORLD", e)
+
+    # 3순위: Juso 좌표 API (키가 coord API까지 승인된 경우)
     if settings.JUSO_API_KEY:
         try:
             return await _juso.geocode(address)
         except Exception as e:
-            logger.warning("Juso geocoding failed (%s), trying VWORLD", e)
+            logger.warning("Juso coord geocoding failed (%s), trying VWORLD", e)
 
-    # 3순위: VWORLD 주소 API (한국 내부 IP에서만 동작할 수 있음)
+    # 4순위: VWORLD 주소 API (한국 내부 IP에서만 동작할 수 있음)
     if settings.VWORLD_API_KEY:
         try:
             return await _vworld.geocode(address)
         except Exception as e:
             logger.warning("VWORLD geocoding failed (%s), falling back to Nominatim", e)
 
-    # 4순위: Nominatim (최후 수단, 정확도 낮음)
+    # 5순위: Nominatim with original address (최후 수단, 정확도 낮음)
     return await _nominatim.geocode(address)
