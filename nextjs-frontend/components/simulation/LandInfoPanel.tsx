@@ -90,7 +90,7 @@ export default function LandInfoPanel({ data, loading }: Props) {
                 tickFormatter={(v) => `${Math.round(v / 10000)}만`}
               />
               <Tooltip
-                formatter={(v: number) => [`${formatPrice(v)}/㎡`, "공시지가"]}
+                formatter={(v) => typeof v === "number" ? [`${formatPrice(v)}/㎡`, "공시지가"] : [String(v ?? ""), "공시지가"]}
                 labelFormatter={(label) => `${label}년`}
                 contentStyle={{ fontSize: 11 }}
               />
