@@ -1,9 +1,44 @@
 import type { LandInfoData, LandPriceEntry } from "./definitions";
 
 const VWORLD_KEY = process.env.NEXT_PUBLIC_VWORLD_API_KEY ?? "";
+const VWORLD_ADDR_URL = "https://api.vworld.kr/req/address";
 const VWORLD_2D_DATA = "https://api.vworld.kr/req/data";
 const VWORLD_NED_ATTR = "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr";
 const LAND_BBOX_DELTA = 0.0003;
+
+export async function geocodeAddress(
+  address: string
+): Promise<{ lat: number; lon: number } | null> {
+  if (!VWORLD_KEY) return null;
+  for (const type of ["road", "parcel"] as const) {
+    try {
+      const url = new URL(VWORLD_ADDR_URL);
+      url.searchParams.set("service", "address");
+      url.searchParams.set("request", "getcoord");
+      url.searchParams.set("version", "2.0");
+      url.searchParams.set("crs", "epsg:4326");
+      url.searchParams.set("address", address);
+      url.searchParams.set("refine", "true");
+      url.searchParams.set("simple", "false");
+      url.searchParams.set("format", "json");
+      url.searchParams.set("type", type);
+      url.searchParams.set("key", VWORLD_KEY);
+
+      const resp = await fetch(url.toString());
+      if (!resp.ok) continue;
+      const data = await resp.json();
+      if (data?.response?.status === "OK") {
+        const point = data.response.result?.point;
+        const lon = parseFloat(point?.x ?? "0");
+        const lat = parseFloat(point?.y ?? "0");
+        if (lat && lon) return { lat, lon };
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
 
 function extractLandType(jibun: string): string {
   const m = jibun.match(/[가-힣]+$/);

@@ -47,19 +47,27 @@ def _haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 @router.get("/nearby")
 async def get_nearby_branches(
-    address: str,
+    address: str = Query(default=""),
+    lat: float | None = Query(default=None),
+    lon: float | None = Query(default=None),
     radius_km: float = Query(default=2.0, gt=0.0, le=50.0),
     _: str = Depends(require_admin),
     db: AsyncSession = Depends(get_async_session),
 ) -> dict:
-    try:
-        target: Coordinates = await map_service.geocode(address)
-    except (ValueError, httpx.HTTPError, httpx.TimeoutException) as exc:
-        logger.warning("Geocoding failed for address=%r: %s", address, exc)
-        raise HTTPException(
-            status_code=422,
-            detail={"detail": "주소 변환 실패", "address": address},
-        )
+    if lat is not None and lon is not None:
+        # 클라이언트 지오코딩 결과를 직접 사용 (VWORLD 등)
+        target = Coordinates(latitude=lat, longitude=lon)
+    elif address:
+        try:
+            target = await map_service.geocode(address)
+        except (ValueError, httpx.HTTPError, httpx.TimeoutException) as exc:
+            logger.warning("Geocoding failed for address=%r: %s", address, exc)
+            raise HTTPException(
+                status_code=422,
+                detail={"detail": "주소 변환 실패", "address": address},
+            )
+    else:
+        raise HTTPException(status_code=400, detail="address 또는 lat/lon 파라미터가 필요합니다")
 
     # Bounding box pre-filter to avoid full table scan
     lat_delta = radius_km / 111.0

@@ -9,8 +9,8 @@ import {
   type BuildingInfoData,
   type LandInfoData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchBuildingInfo } from "@/components/actions/map-action";
-import { fetchLandInfo } from "@/lib/vworld-client";
+import { fetchMapPins, fetchMapPinsByCoords, fetchBuildingInfo } from "@/components/actions/map-action";
+import { geocodeAddress, fetchLandInfo } from "@/lib/vworld-client";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
@@ -60,7 +60,20 @@ export default function SimulationContainer() {
     let cancelled = false;
     setMapLoading(true);
     setMapError(null);
-    fetchMapPins(mapRequest.address).then((data: MapPinsData) => {
+
+    (async () => {
+      // 1순위: 브라우저에서 VWORLD 지오코딩 (정확도 최고)
+      const vworldCoords = await geocodeAddress(mapRequest.address);
+
+      let data: MapPinsData;
+      if (vworldCoords) {
+        // VWORLD 좌표 → 서버에 lat/lon 전달 (지오코딩 스킵)
+        data = await fetchMapPinsByCoords(vworldCoords.lat, vworldCoords.lon);
+      } else {
+        // 폴백: 서버사이드 지오코딩 (Nominatim)
+        data = await fetchMapPins(mapRequest.address);
+      }
+
       if (cancelled) return;
       setMapLoading(false);
       if ("error" in data) {
@@ -76,7 +89,8 @@ export default function SimulationContainer() {
           seq: (prev?.seq ?? 0) + 1,
         }));
       }
-    });
+    })();
+
     return () => {
       cancelled = true;
     };
