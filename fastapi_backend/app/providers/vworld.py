@@ -9,6 +9,7 @@ from app.schemas.map import BranchPin, Coordinates
 logger = logging.getLogger(__name__)
 
 VWORLD_ADDR_URL = "https://api.vworld.kr/req/address"
+VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/"
 
 
 class VWorldMapProvider(MapProvider):
@@ -18,6 +19,7 @@ class VWorldMapProvider(MapProvider):
                 try:
                     resp = await client.get(
                         VWORLD_ADDR_URL,
+                        headers={"Referer": VWORLD_REFERER},
                         params={
                             "service": "address",
                             "request": "getcoord",
