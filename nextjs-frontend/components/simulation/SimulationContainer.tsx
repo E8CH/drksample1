@@ -9,8 +9,8 @@ import {
   type BuildingInfoData,
   type LandInfoData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchMapPinsByCoords, fetchBuildingInfo } from "@/components/actions/map-action";
-import { geocodeAddress, fetchLandInfo } from "@/lib/vworld-client";
+import { fetchMapPins, fetchBuildingInfo } from "@/components/actions/map-action";
+import { fetchLandInfo } from "@/lib/vworld-client";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
@@ -62,17 +62,7 @@ export default function SimulationContainer() {
     setMapError(null);
 
     (async () => {
-      // 1순위: 브라우저에서 VWORLD 지오코딩 (정확도 최고)
-      const vworldCoords = await geocodeAddress(mapRequest.address);
-
-      let data: MapPinsData;
-      if (vworldCoords) {
-        // VWORLD 좌표 → 서버에 lat/lon 전달 (지오코딩 스킵)
-        data = await fetchMapPinsByCoords(vworldCoords.lat, vworldCoords.lon);
-      } else {
-        // 폴백: 서버사이드 지오코딩 (Nominatim)
-        data = await fetchMapPins(mapRequest.address);
-      }
+      const data: MapPinsData = await fetchMapPins(mapRequest.address);
 
       if (cancelled) return;
       setMapLoading(false);
@@ -150,7 +140,7 @@ export default function SimulationContainer() {
           </div>
         )}
 
-        {(landLoading || landInfo) && (
+        {(landLoading || (landInfo && !("error" in landInfo))) && (
           <div className="mt-6 pt-6 border-t border-dalock-border">
             <h3 className="text-sm font-semibold text-dalock-text1 mb-3">공시지가</h3>
             <LandInfoPanel data={landInfo} loading={landLoading} />
