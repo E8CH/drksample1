@@ -14,6 +14,9 @@ logger = logging.getLogger(__name__)
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
 JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
+VWORLD_2D_DATA = "https://api.vworld.kr/req/data"
+VWORLD_NED_ATTR = "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
+_LAND_BBOX_DELTA = 0.0003  # ~30m
 
 # ── 캐시: 주소 → 결과 (24h TTL, 최대 200개 항목) ──────────────────────────
 _CACHE_TTL = 86400
@@ -256,3 +259,99 @@ async def get_building_info(
         }
         _cache_set(cache_key, result)
         return result
+
+
+@router.get("/land")
+async def get_land_info(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    _: str = Depends(require_admin),
+) -> dict:
+    if not settings.VWORLD_API_KEY:
+        raise HTTPException(status_code=503, detail="VWORLD API 키가 설정되지 않았습니다")
+
+    d = _LAND_BBOX_DELTA
+    geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        # Step 1: VWORLD 2D Data API → 필지 폴리곤 + 현재 공시지가
+        try:
+            data_resp = await client.get(
+                VWORLD_2D_DATA,
+                params={
+                    "service": "data",
+                    "version": "2.0",
+                    "request": "GetFeature",
+                    "data": "LP_PA_CBND_BUBUN",
+                    "geomFilter": geom_filter,
+                    "crs": "EPSG:4326",
+                    "format": "json",
+                    "size": 1,
+                    "key": settings.VWORLD_API_KEY,
+                },
+            )
+            data_resp.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.warning("VWORLD 2D Data API 오류: %s", e)
+            raise HTTPException(status_code=502, detail="VWORLD 데이터 API 오류")
+
+        resp_json = data_resp.json()
+        features = (
+            resp_json.get("response", {})
+            .get("result", {})
+            .get("featureCollection", {})
+            .get("features", [])
+        )
+
+        if not features:
+            raise HTTPException(status_code=404, detail="해당 위치의 필지 정보가 없습니다")
+
+        feature = features[0]
+        props = feature.get("properties", {})
+        pnu: str = str(props.get("pnu", "") or "")
+        current_price = int(props.get("indvdLandPc", 0) or 0)
+        std_year = str(props.get("stdrYear", "") or "")
+        land_area = float(props.get("lndpclAr", 0) or 0)
+        land_type = str(props.get("lndcgrCodeNm", "") or "")
+        polygon_geojson = feature.get("geometry")
+
+        # Step 2: NED Attr API → 연도별 공시지가 히스토리
+        price_history: list[dict] = []
+        if pnu:
+            try:
+                attr_resp = await client.get(
+                    VWORLD_NED_ATTR,
+                    params={
+                        "pnu": pnu,
+                        "format": "json",
+                        "key": settings.VWORLD_API_KEY,
+                    },
+                )
+                attr_resp.raise_for_status()
+                attr_data = attr_resp.json()
+                raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
+                if isinstance(raw_items, dict):
+                    raw_items = [raw_items]
+                price_history = sorted(
+                    [
+                        {
+                            "year": int(item.get("stdrYear", 0)),
+                            "price_per_sqm": int(item.get("indvdLandPc", 0) or 0),
+                        }
+                        for item in raw_items
+                        if item.get("stdrYear")
+                    ],
+                    key=lambda x: x["year"],
+                )
+            except Exception as e:
+                logger.warning("공시지가 히스토리 조회 실패: %s", e)
+
+        return {
+            "pnu": pnu,
+            "current_price_per_sqm": current_price,
+            "std_year": std_year,
+            "land_area_sqm": land_area,
+            "land_type": land_type,
+            "polygon": polygon_geojson,
+            "price_history": price_history,
+        }

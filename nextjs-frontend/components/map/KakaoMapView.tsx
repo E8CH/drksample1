@@ -2,7 +2,7 @@
 // Must be loaded via dynamic({ ssr: false }) — Leaflet requires browser globals.
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from "react-leaflet";
 import { divIcon } from "leaflet";
 import { type BranchPinData } from "@/lib/definitions";
 
@@ -11,9 +11,10 @@ type Props = {
   target: { latitude: number; longitude: number } | null;
   pins: BranchPinData[];
   error?: string | null;
+  polygon?: object | null;
 };
 
-export default function KakaoMapView({ address, target, pins, error }: Props) {
+export default function KakaoMapView({ address, target, pins, error, polygon }: Props) {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
@@ -63,6 +64,13 @@ export default function KakaoMapView({ address, target, pins, error }: Props) {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
+        {polygon && (
+          <GeoJSON
+            key={JSON.stringify(polygon)}
+            data={polygon as Parameters<typeof GeoJSON>[0]["data"]}
+            style={{ color: "#2563EB", weight: 2, fillColor: "#3B82F6", fillOpacity: 0.25 }}
+          />
+        )}
         {target && (
           <>
             <Marker position={[target.latitude, target.longitude]} icon={targetIcon}>

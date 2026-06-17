@@ -124,6 +124,23 @@ export type BuildingInfoData =
   | { found: false; road_address: string; jibun_address: string }
   | { error: string };
 
+export type LandPriceEntry = {
+  year: number;
+  price_per_sqm: number;
+};
+
+export type LandInfoData =
+  | {
+      pnu: string;
+      current_price_per_sqm: number;
+      std_year: string;
+      land_area_sqm: number;
+      land_type: string;
+      polygon: object | null;
+      price_history: LandPriceEntry[];
+    }
+  | { error: string };
+
 export const itemSchema = z.object({
   name: z.string().min(1, { message: "Name is required" }),
   description: z.string().min(1, { message: "Description is required" }),

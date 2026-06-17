@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     # 외부 공공 API
     JUSO_API_KEY: str | None = None
     BUILDING_API_KEY: str | None = None
+    VWORLD_API_KEY: str | None = None
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"

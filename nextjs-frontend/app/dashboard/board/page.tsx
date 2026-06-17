@@ -27,7 +27,7 @@ async function fetchSales(params: SearchParams): Promise<SalesListResponse> {
 
   const res = await fetch(url.toString(), {
     headers: { Cookie: `access_token=${token}` },
-    cache: "no-store",
+    next: { revalidate: 30 },
   });
 
   if (res.status === 401) redirect("/login");

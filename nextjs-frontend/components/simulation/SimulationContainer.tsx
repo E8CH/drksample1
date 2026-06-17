@@ -7,11 +7,13 @@ import {
   type BranchPinData,
   type SimulationInput,
   type BuildingInfoData,
+  type LandInfoData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchBuildingInfo } from "@/components/actions/map-action";
+import { fetchMapPins, fetchBuildingInfo, fetchLandInfo } from "@/components/actions/map-action";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
+import LandInfoPanel from "./LandInfoPanel";
 import ProposalModal from "@/components/proposal/ProposalModal";
 
 const KakaoMapView = dynamic(
@@ -46,6 +48,12 @@ export default function SimulationContainer() {
   const [buildingLoading, setBuildingLoading] = useState(false);
   const [buildingInfo, setBuildingInfo] = useState<BuildingInfoData | null>(null);
 
+  // Land info (필지 폴리곤 + 공시지가)
+  type LandRequest = { lat: number; lon: number; seq: number };
+  const [landRequest, setLandRequest] = useState<LandRequest | null>(null);
+  const [landLoading, setLandLoading] = useState(false);
+  const [landInfo, setLandInfo] = useState<LandInfoData | null>(null);
+
   useEffect(() => {
     if (!mapRequest) return;
     let cancelled = false;
@@ -61,6 +69,11 @@ export default function SimulationContainer() {
       } else {
         setMapTarget(data.target);
         setMapPins(data.pins);
+        setLandRequest((prev) => ({
+          lat: data.target.latitude,
+          lon: data.target.longitude,
+          seq: (prev?.seq ?? 0) + 1,
+        }));
       }
     });
     return () => {
@@ -82,6 +95,21 @@ export default function SimulationContainer() {
       cancelled = true;
     };
   }, [buildingRequest]);
+
+  useEffect(() => {
+    if (!landRequest) return;
+    let cancelled = false;
+    setLandLoading(true);
+    setLandInfo(null);
+    fetchLandInfo(landRequest.lat, landRequest.lon).then((data: LandInfoData) => {
+      if (cancelled) return;
+      setLandLoading(false);
+      setLandInfo(data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [landRequest]);
 
   function handleResult(r: SimulationResultData, input: SimulationInput) {
     setResult(r);
@@ -106,6 +134,13 @@ export default function SimulationContainer() {
             <BuildingInfoPanel data={buildingInfo} loading={buildingLoading} />
           </div>
         )}
+
+        {(landLoading || landInfo) && (
+          <div className="mt-6 pt-6 border-t border-dalock-border">
+            <h3 className="text-sm font-semibold text-dalock-text1 mb-3">공시지가</h3>
+            <LandInfoPanel data={landInfo} loading={landLoading} />
+          </div>
+        )}
       </div>
 
       {/* Right panel — map + result overlay */}
@@ -122,6 +157,7 @@ export default function SimulationContainer() {
             target={mapLoading ? null : mapTarget}
             pins={mapLoading ? [] : mapPins}
             error={mapLoading ? null : mapError}
+            polygon={landInfo && !("error" in landInfo) ? landInfo.polygon : null}
           />
         )}
 
