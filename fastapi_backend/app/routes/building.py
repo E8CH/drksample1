@@ -115,13 +115,20 @@ async def get_building_info(
             )
             juso_resp.raise_for_status()
         except httpx.HTTPError as e:
-            logger.warning("Juso API error: %s", e)
-            raise HTTPException(status_code=502, detail="주소 검색 API 오류")
+            # Juso API가 Railway Singapore IP를 차단하거나 연결 불가 시 graceful 응답
+            logger.warning("Juso API error (likely IP block): %s", e)
+            return {"found": False, "road_address": address, "jibun_address": ""}
 
-        juso_data = juso_resp.json()
+        try:
+            juso_data = juso_resp.json()
+        except Exception as e:
+            logger.warning("Juso API JSON parse error: %s", e)
+            return {"found": False, "road_address": address, "jibun_address": ""}
+
         error_code = juso_data.get("results", {}).get("common", {}).get("errorCode", "0")
         if error_code != "0":
-            raise HTTPException(status_code=502, detail="주소 API 오류: " + error_code)
+            logger.warning("Juso API error code: %s", error_code)
+            return {"found": False, "road_address": address, "jibun_address": ""}
 
         juso_list = juso_data.get("results", {}).get("juso") or []
         if not juso_list:

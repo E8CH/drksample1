@@ -2,9 +2,17 @@
 // Must be loaded via dynamic({ ssr: false }) — Leaflet requires browser globals.
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
-import { MapContainer, TileLayer, Marker, Popup, GeoJSON } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from "react-leaflet";
 import { divIcon } from "leaflet";
 import { type BranchPinData } from "@/lib/definitions";
+
+function MapCenter({ target }: { target: { latitude: number; longitude: number } | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (target) map.setView([target.latitude, target.longitude], 15);
+  }, [map, target]);
+  return null;
+}
 
 type Props = {
   address: string;
@@ -60,6 +68,7 @@ export default function KakaoMapView({ address, target, pins, error, polygon }: 
         style={{ height: "100%", width: "100%" }}
         zoomControl={true}
       >
+        <MapCenter target={target} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
