@@ -33,9 +33,13 @@ export default function KakaoMapView({ address, target, pins, error, polygon }: 
     () =>
       divIcon({
         className: "",
-        html: '<span style="font-size:24px;color:#2563EB;text-shadow:0 1px 3px rgba(0,0,0,0.4);line-height:1;">★</span>',
-        iconAnchor: [12, 12],
-        iconSize: [24, 24],
+        html: `<svg width="28" height="40" viewBox="0 0 28 40" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="14" cy="38" rx="5" ry="2" fill="rgba(0,0,0,0.18)"/>
+          <path d="M14 1C7.92 1 3 5.92 3 12c0 8.5 11 25 11 25S25 20.5 25 12C25 5.92 20.08 1 14 1z" fill="#2563EB" stroke="white" stroke-width="1.5"/>
+          <circle cx="14" cy="12" r="5" fill="white"/>
+        </svg>`,
+        iconAnchor: [14, 40],
+        iconSize: [28, 40],
       }),
     []
   );
@@ -44,9 +48,13 @@ export default function KakaoMapView({ address, target, pins, error, polygon }: 
     () =>
       divIcon({
         className: "",
-        html: '<span style="font-size:16px;color:#94A3B8;text-shadow:0 1px 2px rgba(0,0,0,0.3);line-height:1;">●</span>',
-        iconAnchor: [8, 8],
-        iconSize: [16, 16],
+        html: `<svg width="20" height="20" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="10" cy="10" r="8" fill="#EF4444" stroke="white" stroke-width="2"/>
+          <line x1="10" y1="5" x2="10" y2="15" stroke="white" stroke-width="2" stroke-linecap="round"/>
+          <line x1="5" y1="10" x2="15" y2="10" stroke="white" stroke-width="2" stroke-linecap="round"/>
+        </svg>`,
+        iconAnchor: [10, 10],
+        iconSize: [20, 20],
       }),
     []
   );
