@@ -100,6 +100,15 @@ export default function SimulationContainer() {
     };
   }, [buildingRequest]);
 
+  // 건물 정보에 Juso 좌표가 있으면 지오코딩 좌표보다 정확하므로 landRequest를 갱신
+  useEffect(() => {
+    if (!buildingInfo || "error" in buildingInfo || !buildingInfo.found) return;
+    const lat = buildingInfo.latitude;
+    const lon = buildingInfo.longitude;
+    if (!lat || !lon) return;
+    setLandRequest((prev) => ({ lat, lon, seq: (prev?.seq ?? 0) + 1 }));
+  }, [buildingInfo]);
+
   useEffect(() => {
     if (!landRequest) return;
     let cancelled = false;

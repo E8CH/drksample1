@@ -113,6 +113,8 @@ export type BuildingInfoData =
       found: true;
       road_address: string;
       jibun_address: string;
+      latitude: number | null;
+      longitude: number | null;
       building_name: string;
       total_floors: number;
       underground_floors: number;
