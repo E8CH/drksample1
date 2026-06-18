@@ -14,11 +14,16 @@ logger = logging.getLogger(__name__)
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
 JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
-VWORLD_2D_DATA = "https://api.vworld.kr/req/data"
+_VWORLD_HOST = "https://api.vworld.kr"
 VWORLD_2D_LAYER = "LP_PA_CBND_BUBUN"
-VWORLD_NED_ATTR = "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
 # VWORLD API는 등록된 서비스URL의 Referer 헤더가 필요
-VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/"
+VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/dashboard/simulation"
+
+
+def _vworld_url(path: str) -> str:
+    """VWORLD_PROXY_URL이 설정되면 프록시 경유, 아니면 직접 호출."""
+    base = (settings.VWORLD_PROXY_URL or _VWORLD_HOST).rstrip("/")
+    return base + path
 _LAND_BBOX_DELTA = 0.0003  # ~30m
 OVERPASS_URL = "https://lz4.overpass-api.de/api/interpreter"
 _OVERPASS_BBOX_DELTA = 0.0005  # ~50m
@@ -383,7 +388,7 @@ async def get_land_info(
             vworld_headers = {"Referer": VWORLD_REFERER}
             try:
                 data_resp = await client.get(
-                    VWORLD_2D_DATA,
+                    _vworld_url("/req/data"),
                     headers=vworld_headers,
                     params={
                         "service": "data",
@@ -421,7 +426,7 @@ async def get_land_info(
             if pnu:
                 try:
                     attr_resp = await client.get(
-                        VWORLD_NED_ATTR,
+                        _vworld_url("/ned/data/getIndvdLandPriceAttr"),
                         headers=vworld_headers,
                         params={
                             "pnu": pnu,

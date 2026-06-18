@@ -44,6 +44,9 @@ class Settings(BaseSettings):
     JUSO_API_KEY: str | None = None
     BUILDING_API_KEY: str | None = None
     VWORLD_API_KEY: str | None = None
+    # Cloudflare Worker 프록시 URL (설정 시 VWORLD 직접 호출 대신 사용)
+    # 예: https://vworld-proxy.<your-subdomain>.workers.dev
+    VWORLD_PROXY_URL: str | None = None
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"

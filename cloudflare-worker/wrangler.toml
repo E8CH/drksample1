@@ -1,0 +1,13 @@
+name = "vworld-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+
+# Smart Placement: Worker를 VWORLD(한국 서버)에 가장 가까운 PoP(서울)에서 실행
+# → 서울 IP로 api.vworld.kr 에 요청 → IP 차단 우회
+[placement]
+mode = "smart"
+
+# 선택적 시크릿 (공개 접근 제한용)
+# Cloudflare 대시보드 또는 `wrangler secret put PROXY_SECRET` 으로 설정
+# [vars]
+# PROXY_SECRET = ""
