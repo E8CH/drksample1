@@ -273,44 +273,31 @@ async def get_building_info(
         return result
 
 
-async def _fetch_osm_building_polygon(
-    lat: float, lon: float, client: httpx.AsyncClient
-) -> dict | None:
-    """Overpass API로 건물 footprint 폴리곤 조회 (IP 제한 없음).
-    around:100 으로 반경 100m 내 건물 탐색 → 중심점 최근접 건물 반환.
-    """
-    query = (
-        f'[out:json][timeout:12];'
-        f'way["building"](around:100,{lat},{lon});'
-        f'out geom;'
-    )
-    try:
-        resp = await client.get(
-            OVERPASS_URL,
-            params={"data": query},
-            headers={"User-Agent": "drksample1/1.0"},
-            timeout=14.0,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-    except Exception as e:
-        logger.warning("Overpass API 오류: %s", e)
-        return None
+import math
 
-    elements = data.get("elements", [])
-    if not elements:
-        return None
 
-    # bounds 중심점에서 타겟까지 거리로 가장 가까운 건물 선택
-    def _dist(el: dict) -> float:
-        bounds = el.get("bounds", {})
-        if not bounds:
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 6_371_000
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lon2 - lon1)
+    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * R * math.asin(math.sqrt(a))
+
+
+def _elements_to_polygon(elements: list, lat: float, lon: float, max_dist_m: float = 80) -> dict | None:
+    """elements 중 타겟에서 max_dist_m 이내 최근접 건물 → GeoJSON Polygon. 없으면 None."""
+    def _center_dist(el: dict) -> float:
+        b = el.get("bounds", {})
+        if not b:
             return float("inf")
-        clat = (bounds["minlat"] + bounds["maxlat"]) / 2
-        clon = (bounds["minlon"] + bounds["maxlon"]) / 2
-        return (clat - lat) ** 2 + (clon - lon) ** 2
+        return _haversine_m(lat, lon, (b["minlat"] + b["maxlat"]) / 2, (b["minlon"] + b["maxlon"]) / 2)
 
-    way = min(elements, key=_dist)
+    candidates = [el for el in elements if _center_dist(el) <= max_dist_m]
+    if not candidates:
+        return None
+
+    way = min(candidates, key=_center_dist)
     geometry = way.get("geometry", [])
     if len(geometry) < 3:
         return None
@@ -318,21 +305,70 @@ async def _fetch_osm_building_polygon(
     coords = [[g["lon"], g["lat"]] for g in geometry]
     if coords[0] != coords[-1]:
         coords.append(coords[0])
-
     return {"type": "Polygon", "coordinates": [coords]}
+
+
+async def _fetch_osm_building_polygon(
+    lat: float, lon: float, client: httpx.AsyncClient, name: str = ""
+) -> dict | None:
+    """Overpass API로 건물 footprint 폴리곤 조회 (IP 제한 없음).
+
+    1) 건물명이 있으면 name 매칭 우선 탐색 (500m 반경)
+    2) 위치 기반 around:80 탐색 (80m 초과 건물은 폴리곤 반환 거부)
+    """
+    headers = {"User-Agent": "drksample1/1.0"}
+
+    # 1) 이름 매칭 시도
+    if name:
+        escaped = name.replace('"', '\\"')
+        q_name = (
+            f'[out:json][timeout:12];'
+            f'way["building"]["name"~"{escaped}"](around:500,{lat},{lon});'
+            f'out geom;'
+        )
+        try:
+            r = await client.get(OVERPASS_URL, params={"data": q_name}, headers=headers, timeout=14.0)
+            r.raise_for_status()
+            els = r.json().get("elements", [])
+            poly = _elements_to_polygon(els, lat, lon, max_dist_m=500)
+            if poly:
+                logger.info("Overpass 이름 매칭 성공: %s", name)
+                return poly
+        except Exception as e:
+            logger.warning("Overpass 이름 탐색 실패: %s", e)
+
+    # 2) 위치 기반 탐색 (80m 이내만 허용)
+    q_loc = (
+        f'[out:json][timeout:12];'
+        f'way["building"](around:80,{lat},{lon});'
+        f'out geom;'
+    )
+    try:
+        r = await client.get(OVERPASS_URL, params={"data": q_loc}, headers=headers, timeout=14.0)
+        r.raise_for_status()
+        els = r.json().get("elements", [])
+        poly = _elements_to_polygon(els, lat, lon, max_dist_m=80)
+        if poly:
+            return poly
+        logger.info("Overpass: 80m 이내 건물 없음 (lat=%s, lon=%s)", lat, lon)
+    except Exception as e:
+        logger.warning("Overpass 위치 탐색 실패: %s", e)
+
+    return None
 
 
 @router.get("/land")
 async def get_land_info(
     lat: float = Query(...),
     lon: float = Query(...),
+    name: str = Query(default=""),
     _: str = Depends(require_admin),
 ) -> dict:
     import re
 
     async with httpx.AsyncClient(timeout=15.0) as client:
         # Step 1: OSM Overpass → 건물 footprint 폴리곤 (IP 제한 없음)
-        polygon_geojson = await _fetch_osm_building_polygon(lat, lon, client)
+        polygon_geojson = await _fetch_osm_building_polygon(lat, lon, client, name=name)
 
         # Step 2: VWORLD → 공시지가 (한국 IP에서만 작동, 실패 시 graceful)
         pnu = ""

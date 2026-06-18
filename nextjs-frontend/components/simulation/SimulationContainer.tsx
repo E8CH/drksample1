@@ -49,7 +49,7 @@ export default function SimulationContainer() {
   const [buildingInfo, setBuildingInfo] = useState<BuildingInfoData | null>(null);
 
   // Land info (필지 폴리곤 + 공시지가)
-  type LandRequest = { lat: number; lon: number; seq: number };
+  type LandRequest = { lat: number; lon: number; name?: string; seq: number };
   const [landRequest, setLandRequest] = useState<LandRequest | null>(null);
   const [landLoading, setLandLoading] = useState(false);
   const [landInfo, setLandInfo] = useState<LandInfoData | null>(null);
@@ -100,13 +100,22 @@ export default function SimulationContainer() {
     };
   }, [buildingRequest]);
 
-  // 건물 정보에 Juso 좌표가 있으면 지오코딩 좌표보다 정확하므로 landRequest를 갱신
+  // 건물명 획득 시 landRequest에 name 추가 — Overpass 이름 탐색 활성화
+  // Juso 좌표 있으면 위치도 갱신 (Railway에선 null일 수 있음)
   useEffect(() => {
     if (!buildingInfo || "error" in buildingInfo || !buildingInfo.found) return;
+    const name = buildingInfo.building_name || undefined;
     const lat = buildingInfo.latitude;
     const lon = buildingInfo.longitude;
-    if (!lat || !lon) return;
-    setLandRequest((prev) => ({ lat, lon, seq: (prev?.seq ?? 0) + 1 }));
+    setLandRequest((prev) => {
+      if (!prev) return null;
+      return {
+        lat: lat ?? prev.lat,
+        lon: lon ?? prev.lon,
+        name,
+        seq: prev.seq + 1,
+      };
+    });
   }, [buildingInfo]);
 
   useEffect(() => {
@@ -114,7 +123,7 @@ export default function SimulationContainer() {
     let cancelled = false;
     setLandLoading(true);
     setLandInfo(null);
-    fetchLandInfo(landRequest.lat, landRequest.lon).then((data: LandInfoData) => {
+    fetchLandInfo(landRequest.lat, landRequest.lon, landRequest.name).then((data: LandInfoData) => {
       if (cancelled) return;
       setLandLoading(false);
       setLandInfo(data);

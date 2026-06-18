@@ -57,13 +57,15 @@ export async function fetchBuildingInfo(address: string): Promise<BuildingInfoDa
   return res.json();
 }
 
-export async function fetchLandInfo(lat: number, lon: number): Promise<LandInfoData> {
+export async function fetchLandInfo(lat: number, lon: number, name?: string): Promise<LandInfoData> {
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value;
   if (!token) return { error: "인증이 필요합니다" };
 
   const apiUrl = process.env.API_URL ?? "http://localhost:8000";
-  const url = `${apiUrl}/building/land?lat=${lat}&lon=${lon}`;
+  const params = new URLSearchParams({ lat: String(lat), lon: String(lon) });
+  if (name) params.set("name", name);
+  const url = `${apiUrl}/building/land?${params}`;
 
   let res: Response;
   try {
