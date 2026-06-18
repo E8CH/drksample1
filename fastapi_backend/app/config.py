@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     JUSO_API_KEY: str | None = None
     BUILDING_API_KEY: str | None = None
     VWORLD_API_KEY: str | None = None
+    VWORLD_PROXY_URL: str | None = None
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
