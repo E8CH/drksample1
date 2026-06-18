@@ -20,6 +20,8 @@ VWORLD_NED_ATTR = "https://api.vworld.kr/ned/data/getIndvdLandPriceAttr"
 # VWORLD API는 등록된 서비스URL의 Referer 헤더가 필요
 VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/"
 _LAND_BBOX_DELTA = 0.0003  # ~30m
+OVERPASS_URL = "https://lz4.overpass-api.de/api/interpreter"
+_OVERPASS_BBOX_DELTA = 0.0005  # ~50m
 
 # ── 캐시: 주소 → 결과 (24h TTL, 최대 200개 항목) ──────────────────────────
 _CACHE_TTL = 86400
@@ -271,110 +273,155 @@ async def get_building_info(
         return result
 
 
+async def _fetch_osm_building_polygon(
+    lat: float, lon: float, client: httpx.AsyncClient
+) -> dict | None:
+    """Overpass API로 건물 footprint 폴리곤 조회 (IP 제한 없음).
+    around:100 으로 반경 100m 내 건물 탐색 → 중심점 최근접 건물 반환.
+    """
+    query = (
+        f'[out:json][timeout:12];'
+        f'way["building"](around:100,{lat},{lon});'
+        f'out geom;'
+    )
+    try:
+        resp = await client.get(
+            OVERPASS_URL,
+            params={"data": query},
+            headers={"User-Agent": "drksample1/1.0"},
+            timeout=14.0,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception as e:
+        logger.warning("Overpass API 오류: %s", e)
+        return None
+
+    elements = data.get("elements", [])
+    if not elements:
+        return None
+
+    # bounds 중심점에서 타겟까지 거리로 가장 가까운 건물 선택
+    def _dist(el: dict) -> float:
+        bounds = el.get("bounds", {})
+        if not bounds:
+            return float("inf")
+        clat = (bounds["minlat"] + bounds["maxlat"]) / 2
+        clon = (bounds["minlon"] + bounds["maxlon"]) / 2
+        return (clat - lat) ** 2 + (clon - lon) ** 2
+
+    way = min(elements, key=_dist)
+    geometry = way.get("geometry", [])
+    if len(geometry) < 3:
+        return None
+
+    coords = [[g["lon"], g["lat"]] for g in geometry]
+    if coords[0] != coords[-1]:
+        coords.append(coords[0])
+
+    return {"type": "Polygon", "coordinates": [coords]}
+
+
 @router.get("/land")
 async def get_land_info(
     lat: float = Query(...),
     lon: float = Query(...),
     _: str = Depends(require_admin),
 ) -> dict:
-    if not settings.VWORLD_API_KEY:
-        raise HTTPException(status_code=503, detail="VWORLD API 키가 설정되지 않았습니다")
-
     import re
 
-    d = _LAND_BBOX_DELTA
-    geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
-    headers = {"Referer": VWORLD_REFERER}
-
     async with httpx.AsyncClient(timeout=15.0) as client:
-        # Step 1: VWORLD 2D Data API → 필지 폴리곤 + 현재 공시지가 + PNU
-        try:
-            data_resp = await client.get(
-                VWORLD_2D_DATA,
-                headers=headers,
-                params={
-                    "service": "data",
-                    "version": "2.0",
-                    "request": "GetFeature",
-                    "data": VWORLD_2D_LAYER,
-                    "geomFilter": geom_filter,
-                    "crs": "EPSG:4326",
-                    "format": "json",
-                    "size": 1,
-                    "key": settings.VWORLD_API_KEY,
-                },
-            )
-            data_resp.raise_for_status()
-        except httpx.HTTPError as e:
-            logger.warning("VWORLD 2D Data API 오류: %s", e)
-            raise HTTPException(status_code=502, detail="VWORLD 데이터 API 오류")
+        # Step 1: OSM Overpass → 건물 footprint 폴리곤 (IP 제한 없음)
+        polygon_geojson = await _fetch_osm_building_polygon(lat, lon, client)
 
-        resp_json = data_resp.json()
-        if resp_json.get("response", {}).get("status") != "OK":
-            err = resp_json.get("response", {}).get("error", {})
-            logger.warning("VWORLD 2D Data 오류 응답: %s", err)
-            raise HTTPException(status_code=404, detail="해당 위치의 필지 정보가 없습니다")
-
-        features = (
-            resp_json.get("response", {})
-            .get("result", {})
-            .get("featureCollection", {})
-            .get("features", [])
-        )
-        if not features:
-            raise HTTPException(status_code=404, detail="해당 위치의 필지 정보가 없습니다")
-
-        feature = features[0]
-        props = feature.get("properties", {})
-        pnu: str = str(props.get("pnu", "") or "")
-        current_price = int(props.get("jiga", 0) or 0)
-        std_year = str(props.get("gosi_year", "") or "")
-
-        # jibun 예: "293대" → land_type = "대"
-        jibun = str(props.get("jibun", "") or "")
-        land_type_m = re.search(r"[가-힣]+$", jibun)
-        land_type = land_type_m.group() if land_type_m else ""
-        polygon_geojson = feature.get("geometry")
-
-        # Step 2: NED Attr API → 연도별 공시지가 히스토리 (전체)
+        # Step 2: VWORLD → 공시지가 (한국 IP에서만 작동, 실패 시 graceful)
+        pnu = ""
+        current_price = 0
+        std_year = ""
+        land_type = ""
         price_history: list[dict] = []
-        if pnu:
+
+        if settings.VWORLD_API_KEY:
+            d = _LAND_BBOX_DELTA
+            geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
+            vworld_headers = {"Referer": VWORLD_REFERER}
             try:
-                attr_resp = await client.get(
-                    VWORLD_NED_ATTR,
-                    headers=headers,
+                data_resp = await client.get(
+                    VWORLD_2D_DATA,
+                    headers=vworld_headers,
                     params={
-                        "pnu": pnu,
+                        "service": "data",
+                        "version": "2.0",
+                        "request": "GetFeature",
+                        "data": VWORLD_2D_LAYER,
+                        "geomFilter": geom_filter,
+                        "crs": "EPSG:4326",
                         "format": "json",
-                        "numOfRows": 100,
+                        "size": 1,
                         "key": settings.VWORLD_API_KEY,
                     },
                 )
-                if attr_resp.status_code == 200:
-                    attr_data = attr_resp.json()
-                    raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
-                    if isinstance(raw_items, dict):
-                        raw_items = [raw_items]
-                    price_history = sorted(
-                        [
-                            {
-                                "year": int(item.get("stdrYear", 0)),
-                                "price_per_sqm": int(item.get("pblntfPclnd", 0) or 0),
-                            }
-                            for item in raw_items
-                            if item.get("stdrYear") and item.get("pblntfPclnd")
-                        ],
-                        key=lambda x: x["year"],
+                data_resp.raise_for_status()
+                resp_json = data_resp.json()
+                if resp_json.get("response", {}).get("status") == "OK":
+                    features = (
+                        resp_json.get("response", {})
+                        .get("result", {})
+                        .get("featureCollection", {})
+                        .get("features", [])
                     )
+                    if features:
+                        props = features[0].get("properties", {})
+                        pnu = str(props.get("pnu", "") or "")
+                        current_price = int(props.get("jiga", 0) or 0)
+                        std_year = str(props.get("gosi_year", "") or "")
+                        jibun = str(props.get("jibun", "") or "")
+                        m = re.search(r"[가-힣]+$", jibun)
+                        land_type = m.group() if m else ""
             except Exception as e:
-                logger.warning("공시지가 히스토리 조회 실패: %s", e)
+                logger.warning("VWORLD 2D Data 실패 (IP 차단 가능성): %s", e)
 
-        return {
-            "pnu": pnu,
-            "current_price_per_sqm": current_price,
-            "std_year": std_year,
-            "land_area_sqm": 0.0,
-            "land_type": land_type,
-            "polygon": polygon_geojson,
-            "price_history": price_history,
-        }
+            # Step 2b: NED Attr → 연도별 공시지가 히스토리
+            if pnu:
+                try:
+                    attr_resp = await client.get(
+                        VWORLD_NED_ATTR,
+                        headers=vworld_headers,
+                        params={
+                            "pnu": pnu,
+                            "format": "json",
+                            "numOfRows": 100,
+                            "key": settings.VWORLD_API_KEY,
+                        },
+                    )
+                    if attr_resp.status_code == 200:
+                        attr_data = attr_resp.json()
+                        raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
+                        if isinstance(raw_items, dict):
+                            raw_items = [raw_items]
+                        price_history = sorted(
+                            [
+                                {
+                                    "year": int(item.get("stdrYear", 0)),
+                                    "price_per_sqm": int(item.get("pblntfPclnd", 0) or 0),
+                                }
+                                for item in raw_items
+                                if item.get("stdrYear") and item.get("pblntfPclnd")
+                            ],
+                            key=lambda x: x["year"],
+                        )
+                except Exception as e:
+                    logger.warning("공시지가 히스토리 조회 실패: %s", e)
+
+    if polygon_geojson is None and not pnu:
+        raise HTTPException(status_code=404, detail="건물 및 필지 정보를 찾을 수 없습니다")
+
+    return {
+        "pnu": pnu,
+        "current_price_per_sqm": current_price,
+        "std_year": std_year,
+        "land_area_sqm": 0.0,
+        "land_type": land_type,
+        "polygon": polygon_geojson,
+        "price_history": price_history,
+    }
