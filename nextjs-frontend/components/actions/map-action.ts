@@ -1,6 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
-import { type MapPinsData, type BuildingInfoData } from "@/lib/definitions";
+import { type MapPinsData, type BuildingInfoData, type LandInfoData } from "@/lib/definitions";
 
 export async function fetchMapPins(address: string): Promise<MapPinsData> {
   if (!address.trim()) return { error: "주소가 비어 있습니다" };
@@ -53,6 +53,32 @@ export async function fetchBuildingInfo(address: string): Promise<BuildingInfoDa
   if (res.status === 404) return { error: "건물 정보를 찾을 수 없습니다" };
   if (res.status === 503) return { error: "건물 API 미설정" };
   if (!res.ok) return { error: "건물 정보 로드 실패" };
+
+  return res.json();
+}
+
+export async function fetchLandInfo(lat: number, lon: number): Promise<LandInfoData> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token) return { error: "인증이 필요합니다" };
+
+  const apiUrl = process.env.API_URL ?? "http://localhost:8000";
+  const url = `${apiUrl}/building/land?lat=${lat}&lon=${lon}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      headers: { Cookie: `access_token=${token}` },
+      cache: "no-store",
+    });
+  } catch {
+    return { error: "필지 정보 서버 연결에 실패했습니다" };
+  }
+
+  if (res.status === 401) return { error: "인증이 만료되었습니다" };
+  if (res.status === 503) return { error: "VWORLD API 미설정" };
+  if (res.status === 404) return { error: "해당 위치의 필지 정보가 없습니다" };
+  if (!res.ok) return { error: "필지 정보 로드 실패" };
 
   return res.json();
 }
