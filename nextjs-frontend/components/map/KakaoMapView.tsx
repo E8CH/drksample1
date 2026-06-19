@@ -20,7 +20,7 @@ function PolygonFit({ polygon }: { polygon: object | null }) {
     if (!polygon) return;
     try {
       const bounds = leafletGeoJSON(polygon as Parameters<typeof leafletGeoJSON>[0]).getBounds();
-      if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 19 });
+      if (bounds.isValid()) map.setView(bounds.getCenter(), 19);
     } catch {}
   }, [map, polygon]);
   return null;
