@@ -648,17 +648,25 @@ async def get_area_rent(
     if cached:
         return cached
 
-    # 3개 테이블 병렬 패치 (각 20 페이지 × 병렬)
+    # 5개 테이블 병렬 패치 (각 20 페이지 × 병렬)
     async with httpx.AsyncClient(timeout=30.0) as client:
-        office_rent_rows, office_vacancy_rows, mall_rent_rows = await asyncio.gather(
+        (
+            office_rent_rows,
+            office_vacancy_rows,
+            large_mall_rent_rows,
+            large_mall_vacancy_rows,
+            small_mall_rent_rows,
+        ) = await asyncio.gather(
             _reb_fetch_latest(_REB_OFFICE_RENT, client),
             _reb_fetch_latest(_REB_OFFICE_VACANCY, client),
             _reb_fetch_latest(_REB_LARGE_MALL_RENT, client),
+            _reb_fetch_latest(_REB_LARGE_MALL_VACANCY, client),
+            _reb_fetch_latest(_REB_SMALL_MALL_RENT, client),
         )
 
     # 분기 설명 추출
     quarter_desc = ""
-    for rows in (office_rent_rows, office_vacancy_rows, mall_rent_rows):
+    for rows in (office_rent_rows, office_vacancy_rows, large_mall_rent_rows, small_mall_rent_rows):
         if rows:
             quarter_desc = rows[0].get("WRTTIME_DESC", "")
             break
@@ -666,7 +674,7 @@ async def get_area_rent(
     def _unique(rows: list[dict], sido: str) -> list[dict]:
         """sido 내 + 전국 필터, CLS_ID 중복 제거."""
         seen: set = set()
-        result: list[dict] = []
+        out: list[dict] = []
         for r in rows:
             cls_full = r.get("CLS_FULLNM") or ""
             cls_nm = r.get("CLS_NM") or ""
@@ -674,41 +682,59 @@ async def get_area_rent(
                 cid = r.get("CLS_ID")
                 if cid not in seen:
                     seen.add(cid)
-                    result.append(r)
-        return result
+                    out.append(r)
+        return out
+
+    def _sort_national_first(rows: list[dict]) -> list[dict]:
+        return sorted(rows, key=lambda x: (0 if (x.get("CLS_NM") or "") == "전국" else 1))
 
     office_rent_f = _unique(office_rent_rows, sido_name)
     office_vacancy_f = _unique(office_vacancy_rows, sido_name)
-    mall_rent_f = _unique(mall_rent_rows, sido_name)
+    large_mall_rent_f = _unique(large_mall_rent_rows, sido_name)
+    large_mall_vacancy_f = _unique(large_mall_vacancy_rows, sido_name)
+    small_mall_rent_f = _unique(small_mall_rent_rows, sido_name)
 
-    vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in office_vacancy_f}
+    office_vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in office_vacancy_f}
+    large_mall_vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in large_mall_vacancy_f}
 
-    # 오피스 상권 목록 (전국 먼저, 그다음 시도 내 상권)
-    areas: list[dict] = []
-    for r in sorted(office_rent_f, key=lambda x: (0 if (x.get("CLS_NM") or "") == "전국" else 1)):
+    # 오피스: 임대료 + 공실률
+    office_areas: list[dict] = []
+    for r in _sort_national_first(office_rent_f):
         rent_val = r.get("DTA_VAL")
-        vac_val = vacancy_by_cls.get(r.get("CLS_ID"))
-        areas.append({
+        vac_val = office_vacancy_by_cls.get(r.get("CLS_ID"))
+        office_areas.append({
             "name": r.get("CLS_NM", ""),
             "office_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
             "office_vacancy_pct": round(float(vac_val), 2) if vac_val else None,
         })
 
-    # 중대형상가 상권 목록
-    mall_areas: list[dict] = []
-    for r in sorted(mall_rent_f, key=lambda x: (0 if (x.get("CLS_NM") or "") == "전국" else 1)):
+    # 중대형상가: 임대료 + 공실률
+    large_mall_areas: list[dict] = []
+    for r in _sort_national_first(large_mall_rent_f):
         rent_val = r.get("DTA_VAL")
-        mall_areas.append({
+        vac_val = large_mall_vacancy_by_cls.get(r.get("CLS_ID"))
+        large_mall_areas.append({
             "name": r.get("CLS_NM", ""),
             "mall_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
+            "mall_vacancy_pct": round(float(vac_val), 2) if vac_val else None,
+        })
+
+    # 소규모상가: 임대료
+    small_mall_areas: list[dict] = []
+    for r in _sort_national_first(small_mall_rent_f):
+        rent_val = r.get("DTA_VAL")
+        small_mall_areas.append({
+            "name": r.get("CLS_NM", ""),
+            "small_mall_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
         })
 
     result = {
         "quarter": quarter_desc,
         "sido": sido_name,
-        "office_areas": areas,
-        "mall_areas": mall_areas,
-        "has_data": bool(areas or mall_areas),
+        "office_areas": office_areas,
+        "large_mall_areas": large_mall_areas,
+        "small_mall_areas": small_mall_areas,
+        "has_data": bool(office_areas or large_mall_areas or small_mall_areas),
     }
     if result["has_data"]:
         _cache_set(cache_key, result)

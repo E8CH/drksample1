@@ -147,9 +147,15 @@ export type AreaRentOfficeArea = {
   office_vacancy_pct: number | null;
 };
 
-export type AreaRentMallArea = {
+export type AreaRentLargeMallArea = {
   name: string;
   mall_rent_kwon_sqm: number | null;
+  mall_vacancy_pct: number | null;
+};
+
+export type AreaRentSmallMallArea = {
+  name: string;
+  small_mall_rent_kwon_sqm: number | null;
 };
 
 export type AreaRentData =
@@ -157,7 +163,8 @@ export type AreaRentData =
       quarter: string;
       sido: string;
       office_areas: AreaRentOfficeArea[];
-      mall_areas: AreaRentMallArea[];
+      large_mall_areas: AreaRentLargeMallArea[];
+      small_mall_areas: AreaRentSmallMallArea[];
       has_data: boolean;
     }
   | { error: string };

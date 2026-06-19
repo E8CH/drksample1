@@ -10,6 +10,52 @@ function SkeletonRow() {
   return <div className="h-4 bg-dalock-surface rounded animate-pulse mb-2" />;
 }
 
+function RentTable({
+  title,
+  cols,
+  rows,
+}: {
+  title: string;
+  cols: string[];
+  rows: (string | null)[][];
+}) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-dalock-text1 mb-1">{title}</p>
+      <div className="max-h-36 overflow-y-auto rounded-lg border border-dalock-border">
+        <table className="w-full text-xs">
+          <thead className="bg-dalock-surface sticky top-0">
+            <tr>
+              {cols.map((c, i) => (
+                <th
+                  key={i}
+                  className={`px-2 py-1 text-dalock-text2 font-medium ${i === 0 ? "text-left" : "text-right"}`}
+                >
+                  {c}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row, i) => (
+              <tr key={i} className="border-t border-dalock-border">
+                {row.map((cell, j) => (
+                  <td
+                    key={j}
+                    className={`px-2 py-1 ${j === 0 ? "text-dalock-text2" : "text-right text-dalock-text1"}`}
+                  >
+                    {cell ?? "—"}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export default function AreaRentPanel({ data, loading }: Props) {
   if (loading) {
     return (
@@ -35,6 +81,9 @@ export default function AreaRentPanel({ data, loading }: Props) {
     );
   }
 
+  const fmt = (v: number | null, suffix: string) =>
+    v != null ? `${v.toFixed(1)}${suffix}` : null;
+
   return (
     <div className="space-y-3">
       {data.quarter && (
@@ -42,65 +91,38 @@ export default function AreaRentPanel({ data, loading }: Props) {
       )}
 
       {data.office_areas.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-dalock-text1 mb-1">오피스 임대료</p>
-          <div className="max-h-36 overflow-y-auto rounded-lg border border-dalock-border">
-            <table className="w-full text-xs">
-              <thead className="bg-dalock-surface sticky top-0">
-                <tr>
-                  <th className="text-left px-2 py-1 text-dalock-text2 font-medium">상권</th>
-                  <th className="text-right px-2 py-1 text-dalock-text2 font-medium">임대료</th>
-                  <th className="text-right px-2 py-1 text-dalock-text2 font-medium">공실률</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.office_areas.map((a, i) => (
-                  <tr key={i} className="border-t border-dalock-border">
-                    <td className="px-2 py-1 text-dalock-text2">{a.name}</td>
-                    <td className="px-2 py-1 text-right text-dalock-text1">
-                      {a.office_rent_kwon_sqm != null
-                        ? `${a.office_rent_kwon_sqm.toFixed(1)}천원/㎡`
-                        : "—"}
-                    </td>
-                    <td className="px-2 py-1 text-right text-dalock-text2">
-                      {a.office_vacancy_pct != null
-                        ? `${a.office_vacancy_pct.toFixed(1)}%`
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <RentTable
+          title="오피스 임대료"
+          cols={["상권", "임대료(천원/㎡)", "공실률"]}
+          rows={data.office_areas.map((a) => [
+            a.name,
+            fmt(a.office_rent_kwon_sqm, "천원/㎡"),
+            fmt(a.office_vacancy_pct, "%"),
+          ])}
+        />
       )}
 
-      {data.mall_areas.length > 0 && (
-        <div>
-          <p className="text-xs font-medium text-dalock-text1 mb-1">중대형상가 임대료</p>
-          <div className="max-h-36 overflow-y-auto rounded-lg border border-dalock-border">
-            <table className="w-full text-xs">
-              <thead className="bg-dalock-surface sticky top-0">
-                <tr>
-                  <th className="text-left px-2 py-1 text-dalock-text2 font-medium">상권</th>
-                  <th className="text-right px-2 py-1 text-dalock-text2 font-medium">임대료</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.mall_areas.map((a, i) => (
-                  <tr key={i} className="border-t border-dalock-border">
-                    <td className="px-2 py-1 text-dalock-text2">{a.name}</td>
-                    <td className="px-2 py-1 text-right text-dalock-text1">
-                      {a.mall_rent_kwon_sqm != null
-                        ? `${a.mall_rent_kwon_sqm.toFixed(1)}천원/㎡`
-                        : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {data.large_mall_areas.length > 0 && (
+        <RentTable
+          title="중대형상가 임대료"
+          cols={["상권", "임대료(천원/㎡)", "공실률"]}
+          rows={data.large_mall_areas.map((a) => [
+            a.name,
+            fmt(a.mall_rent_kwon_sqm, "천원/㎡"),
+            fmt(a.mall_vacancy_pct, "%"),
+          ])}
+        />
+      )}
+
+      {data.small_mall_areas.length > 0 && (
+        <RentTable
+          title="소규모상가 임대료"
+          cols={["상권", "임대료(천원/㎡)"]}
+          rows={data.small_mall_areas.map((a) => [
+            a.name,
+            fmt(a.small_mall_rent_kwon_sqm, "천원/㎡"),
+          ])}
+        />
       )}
     </div>
   );
