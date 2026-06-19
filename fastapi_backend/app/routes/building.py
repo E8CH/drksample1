@@ -663,42 +663,40 @@ async def get_area_rent(
             quarter_desc = rows[0].get("WRTTIME_DESC", "")
             break
 
-    def _filter(rows: list[dict], sido: str) -> list[dict]:
-        if not sido:
-            return rows
-        return [r for r in rows if (r.get("CLS_FULLNM") or "").startswith(sido + ">")]
+    def _unique(rows: list[dict], sido: str) -> list[dict]:
+        """sido 내 + 전국 필터, CLS_ID 중복 제거."""
+        seen: set = set()
+        result: list[dict] = []
+        for r in rows:
+            cls_full = r.get("CLS_FULLNM") or ""
+            cls_nm = r.get("CLS_NM") or ""
+            if cls_nm == "전국" or (sido and cls_full.startswith(sido + ">")):
+                cid = r.get("CLS_ID")
+                if cid not in seen:
+                    seen.add(cid)
+                    result.append(r)
+        return result
 
-    office_rent_sido = _filter(office_rent_rows, sido_name)
-    office_vacancy_sido = _filter(office_vacancy_rows, sido_name)
-    mall_rent_sido = _filter(mall_rent_rows, sido_name)
+    office_rent_f = _unique(office_rent_rows, sido_name)
+    office_vacancy_f = _unique(office_vacancy_rows, sido_name)
+    mall_rent_f = _unique(mall_rent_rows, sido_name)
 
-    # vacancy 조회표
-    vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in office_vacancy_sido}
+    vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in office_vacancy_f}
 
-    # 상권 목록 구성 (오피스 기준)
+    # 오피스 상권 목록 (전국 먼저, 그다음 시도 내 상권)
     areas: list[dict] = []
-    seen_cls = set()
-    for r in office_rent_sido:
-        cls_id = r.get("CLS_ID")
-        if cls_id in seen_cls:
-            continue
-        seen_cls.add(cls_id)
+    for r in sorted(office_rent_f, key=lambda x: (0 if (x.get("CLS_NM") or "") == "전국" else 1)):
         rent_val = r.get("DTA_VAL")
-        vac_val = vacancy_by_cls.get(cls_id)
+        vac_val = vacancy_by_cls.get(r.get("CLS_ID"))
         areas.append({
             "name": r.get("CLS_NM", ""),
             "office_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
             "office_vacancy_pct": round(float(vac_val), 2) if vac_val else None,
         })
 
-    # 상가 (중대형) 상권 별도 추가
+    # 중대형상가 상권 목록
     mall_areas: list[dict] = []
-    seen_mall = set()
-    for r in mall_rent_sido:
-        cls_id = r.get("CLS_ID")
-        if cls_id in seen_mall:
-            continue
-        seen_mall.add(cls_id)
+    for r in sorted(mall_rent_f, key=lambda x: (0 if (x.get("CLS_NM") or "") == "전국" else 1)):
         rent_val = r.get("DTA_VAL")
         mall_areas.append({
             "name": r.get("CLS_NM", ""),
