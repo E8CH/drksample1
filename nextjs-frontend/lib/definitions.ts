@@ -122,8 +122,23 @@ export type BuildingInfoData =
       total_units: number;
       main_purpose: string;
       units: BuildingUnit[];
+      sigungu_cd: string;
+      bun: string;
     }
   | { found: false; road_address: string; jibun_address: string }
+  | { error: string };
+
+export type RentTransaction = {
+  date: string;
+  amount_wan: number;
+  floor: string;
+  area_sqm: number;
+  building_name: string;
+  land_use: string;
+};
+
+export type RentData =
+  | { transactions: RentTransaction[] }
   | { error: string };
 
 export type LandPriceEntry = {

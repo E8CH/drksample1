@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     BUILDING_API_KEY: str | None = None
     VWORLD_API_KEY: str | None = None
     VWORLD_PROXY_URL: str | None = None
+    RTM_API_KEY: str | None = None  # 국토교통부 실거래가 (data.go.kr 별도 등록)
 
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"

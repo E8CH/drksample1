@@ -8,12 +8,14 @@ import {
   type SimulationInput,
   type BuildingInfoData,
   type LandInfoData,
+  type RentData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchBuildingInfo, fetchLandInfo } from "@/components/actions/map-action";
+import { fetchMapPins, fetchBuildingInfo, fetchLandInfo, fetchBuildingRent } from "@/components/actions/map-action";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
 import LandInfoPanel from "./LandInfoPanel";
+import RentInfoPanel from "./RentInfoPanel";
 import ProposalModal from "@/components/proposal/ProposalModal";
 
 const KakaoMapView = dynamic(
@@ -53,6 +55,10 @@ export default function SimulationContainer() {
   const [landRequest, setLandRequest] = useState<LandRequest | null>(null);
   const [landLoading, setLandLoading] = useState(false);
   const [landInfo, setLandInfo] = useState<LandInfoData | null>(null);
+
+  // 실거래가
+  const [rentLoading, setRentLoading] = useState(false);
+  const [rentData, setRentData] = useState<RentData | null>(null);
 
   useEffect(() => {
     if (!mapRequest) return;
@@ -100,8 +106,7 @@ export default function SimulationContainer() {
     };
   }, [buildingRequest]);
 
-  // 건물명 획득 시 landRequest에 name 추가 — Overpass 이름 탐색 활성화
-  // Juso 좌표 있으면 위치도 갱신 (Railway에선 null일 수 있음)
+  // 건물명 획득 시 landRequest에 name 추가 + 실거래가 조회 시작
   useEffect(() => {
     if (!buildingInfo || "error" in buildingInfo || !buildingInfo.found) return;
     const name = buildingInfo.building_name || undefined;
@@ -109,13 +114,18 @@ export default function SimulationContainer() {
     const lon = buildingInfo.longitude;
     setLandRequest((prev) => {
       if (!prev) return null;
-      return {
-        lat: lat ?? prev.lat,
-        lon: lon ?? prev.lon,
-        name,
-        seq: prev.seq + 1,
-      };
+      return { lat: lat ?? prev.lat, lon: lon ?? prev.lon, name, seq: prev.seq + 1 };
     });
+
+    // 실거래가 — sigungu_cd + bun 있을 때만
+    if (buildingInfo.sigungu_cd && buildingInfo.bun) {
+      setRentLoading(true);
+      setRentData(null);
+      fetchBuildingRent(buildingInfo.sigungu_cd, buildingInfo.bun, buildingInfo.building_name).then((data) => {
+        setRentLoading(false);
+        setRentData(data);
+      });
+    }
   }, [buildingInfo]);
 
   useEffect(() => {
@@ -161,6 +171,13 @@ export default function SimulationContainer() {
           <div className="mt-6 pt-6 border-t border-dalock-border">
             <h3 className="text-sm font-semibold text-dalock-text1 mb-3">공시지가</h3>
             <LandInfoPanel data={landInfo} loading={landLoading} />
+          </div>
+        )}
+
+        {(rentLoading || rentData) && (
+          <div className="mt-6 pt-6 border-t border-dalock-border">
+            <h3 className="text-sm font-semibold text-dalock-text1 mb-3">상업용 실거래가 (최근 2년)</h3>
+            <RentInfoPanel data={rentData} loading={rentLoading} />
           </div>
         )}
       </div>

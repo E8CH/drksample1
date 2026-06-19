@@ -1,6 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
-import { type MapPinsData, type BuildingInfoData, type LandInfoData } from "@/lib/definitions";
+import { type MapPinsData, type BuildingInfoData, type LandInfoData, type RentData } from "@/lib/definitions";
 
 export async function fetchMapPins(address: string): Promise<MapPinsData> {
   if (!address.trim()) return { error: "주소가 비어 있습니다" };
@@ -82,6 +82,28 @@ export async function fetchLandInfo(lat: number, lon: number, name?: string): Pr
   if (res.status === 404) return { error: "해당 위치의 필지 정보가 없습니다" };
   if (!res.ok) return { error: "필지 정보 로드 실패" };
 
+  return res.json();
+}
+
+export async function fetchBuildingRent(sigunguCd: string, bun: string, name: string): Promise<RentData> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token) return { error: "인증이 필요합니다" };
+
+  const apiUrl = process.env.API_URL ?? "http://localhost:8000";
+  const params = new URLSearchParams({ sigungu_cd: sigunguCd, bun, name });
+  const url = `${apiUrl}/building/rent?${params}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { Cookie: `access_token=${token}` }, cache: "no-store" });
+  } catch {
+    return { error: "실거래가 서버 연결 실패" };
+  }
+
+  if (res.status === 401) return { error: "인증이 만료되었습니다" };
+  if (res.status === 503) return { error: "API 키 미설정" };
+  if (!res.ok) return { error: "실거래가 로드 실패" };
   return res.json();
 }
 

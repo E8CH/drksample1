@@ -1,6 +1,10 @@
+import asyncio
 import logging
+import math
+import re
 import time
 from collections import defaultdict
+from datetime import date
 
 import httpx
 import jwt
@@ -14,17 +18,12 @@ logger = logging.getLogger(__name__)
 JUSO_URL = "https://business.juso.go.kr/addrlink/addrLinkApi.do"
 JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
+RTM_BASE = "http://apis.data.go.kr/1613000"
 _VWORLD_HOST = "https://api.vworld.kr"
 VWORLD_2D_LAYER = "LP_PA_CBND_BUBUN"
 VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/dashboard/simulation"
-
-
-def _vworld_url(path: str) -> str:
-    base = (settings.VWORLD_PROXY_URL or _VWORLD_HOST).rstrip("/")
-    return base + path
-_LAND_BBOX_DELTA = 0.0003  # ~30m
 OVERPASS_URL = "https://lz4.overpass-api.de/api/interpreter"
-_OVERPASS_BBOX_DELTA = 0.0005  # ~50m
+_LAND_BBOX_DELTA = 0.0003  # ~30m
 
 # ── 캐시: 주소 → 결과 (24h TTL, 최대 200개 항목) ──────────────────────────
 _CACHE_TTL = 86400
@@ -42,14 +41,13 @@ def _cache_get(key: str) -> dict | None:
 
 def _cache_set(key: str, value: dict) -> None:
     if len(_cache) >= _CACHE_MAX:
-        # 가장 오래된 항목 제거
         oldest = min(_cache, key=lambda k: _cache[k][0])
         del _cache[oldest]
     _cache[key] = (time.time(), value)
 
 
 # ── Rate limiter: 건축물대장 외부 API 분당 최대 5회 ────────────────────────
-_EXT_RATE_LIMIT = 5  # calls per minute
+_EXT_RATE_LIMIT = 5
 _ext_call_times: list[float] = []
 
 
@@ -63,6 +61,11 @@ def _check_rate_limit() -> None:
             detail=f"건축물대장 API 호출 한도 초과 — {wait_sec}초 후 다시 시도하세요",
         )
     _ext_call_times.append(now)
+
+
+def _vworld_url(path: str) -> str:
+    base = (settings.VWORLD_PROXY_URL or _VWORLD_HOST).rstrip("/")
+    return base + path
 
 
 async def require_admin(access_token: str | None = Cookie(None)) -> str:
@@ -88,6 +91,8 @@ def _items_as_list(raw) -> list:
     return raw
 
 
+# ── /building/info ─────────────────────────────────────────────────────────
+
 @router.get("/info")
 async def get_building_info(
     address: str = Query(..., min_length=1),
@@ -102,11 +107,10 @@ async def get_building_info(
         logger.info("Building cache hit: %s", address)
         return cached
 
-    # 캐시 미스 시에만 외부 API 호출 — rate limit 체크
     _check_rate_limit()
 
     async with httpx.AsyncClient(timeout=15.0) as client:
-        # Step 1: Juso API — 주소 → admCd + 지번
+        # Step 1: Juso API → admCd + 지번
         try:
             juso_resp = await client.get(
                 JUSO_URL,
@@ -120,8 +124,7 @@ async def get_building_info(
             )
             juso_resp.raise_for_status()
         except httpx.HTTPError as e:
-            # Juso API가 Railway Singapore IP를 차단하거나 연결 불가 시 graceful 응답
-            logger.warning("Juso API error (likely IP block): %s", e)
+            logger.warning("Juso API error: %s", e)
             return {"found": False, "road_address": address, "jibun_address": ""}
 
         try:
@@ -149,7 +152,7 @@ async def get_building_info(
         bun = str(j.get("lnbrMnnm") or "0").zfill(4)
         ji = str(j.get("lnbrSlno") or "0").zfill(4)
 
-        # Step 1-b: Juso 좌표 API — 같은 key로 위경도 획득
+        # Step 1-b: Juso 좌표 API — 위경도 획득
         coord_lat: float | None = None
         coord_lon: float | None = None
         try:
@@ -170,9 +173,6 @@ async def get_building_info(
             if coord_juso:
                 coord_lat = float(coord_juso[0].get("lat") or 0) or None
                 coord_lon = float(coord_juso[0].get("lon") or 0) or None
-                logger.info("Juso coord OK: lat=%s lon=%s", coord_lat, coord_lon)
-            else:
-                logger.warning("Juso coord: 결과 없음 응답=%s", str(coord_data)[:200])
         except Exception as e:
             logger.warning("Juso coord API 실패: %s", e)
 
@@ -208,17 +208,16 @@ async def get_building_info(
             _cache_set(cache_key, result)
             return result
 
-        # 집합건물 표제부 우선, 없으면 첫 번째
         title = next(
             (t for t in title_items if "표제부" in (t.get("regstrKindCdNm") or "")),
             title_items[0],
         )
 
-        # Step 3: 호수별 전유/공용 면적 — API가 numOfRows를 무시하고 1개씩 반환하므로 페이지네이션
+        # Step 3: 호수별 전유/공용 면적 — 페이지네이션
         expo_params = {**bld_params, "numOfRows": 100}
         expo_items: list = []
         try:
-            for page_no in range(1, 201):  # 최대 200페이지 (200×100=20,000호)
+            for page_no in range(1, 201):
                 expo_params["pageNo"] = page_no
                 expo_resp = await client.get(
                     f"{BLDRGST_BASE}/getBrExposPubuseAreaInfo", params=expo_params
@@ -235,7 +234,6 @@ async def get_building_info(
             logger.warning("BldRgst expo API error: %s", e)
             expo_items = []
 
-        # 호수별 집계
         units: dict = defaultdict(
             lambda: {"floor": "", "purpose": "", "exclusive_sqm": 0.0, "common_sqm": 0.0}
         )
@@ -276,13 +274,14 @@ async def get_building_info(
             "total_units": int(title.get("hhldCnt") or len(unit_list)),
             "main_purpose": title.get("mainPurpsCdNm") or "",
             "units": unit_list,
+            "sigungu_cd": sigungu_cd,
+            "bun": bun,
         }
         _cache_set(cache_key, result)
         return result
 
 
-import math
-
+# ── Overpass / VWORLD 헬퍼 ─────────────────────────────────────────────────
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     R = 6_371_000
@@ -294,7 +293,6 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 def _elements_to_polygon(elements: list, lat: float, lon: float, max_dist_m: float = 80) -> dict | None:
-    """elements 중 타겟에서 max_dist_m 이내 최근접 건물 → GeoJSON Polygon. 없으면 None."""
     def _center_dist(el: dict) -> float:
         b = el.get("bounds", {})
         if not b:
@@ -304,12 +302,10 @@ def _elements_to_polygon(elements: list, lat: float, lon: float, max_dist_m: flo
     candidates = [el for el in elements if _center_dist(el) <= max_dist_m]
     if not candidates:
         return None
-
     way = min(candidates, key=_center_dist)
     geometry = way.get("geometry", [])
     if len(geometry) < 3:
         return None
-
     coords = [[g["lon"], g["lat"]] for g in geometry]
     if coords[0] != coords[-1]:
         coords.append(coords[0])
@@ -319,51 +315,129 @@ def _elements_to_polygon(elements: list, lat: float, lon: float, max_dist_m: flo
 async def _fetch_osm_building_polygon(
     lat: float, lon: float, client: httpx.AsyncClient, name: str = ""
 ) -> dict | None:
-    """Overpass API로 건물 footprint 폴리곤 조회 (IP 제한 없음).
-
-    1) 건물명이 있으면 name 매칭 우선 탐색 (500m 반경)
-    2) 위치 기반 around:80 탐색 (80m 초과 건물은 폴리곤 반환 거부)
-    """
+    """Overpass 건물 footprint 조회. name/location 쿼리를 병렬로 실행."""
     headers = {"User-Agent": "drksample1/1.0"}
 
-    # 1) 이름 매칭 시도
+    async def _query(q: str, dist: float) -> dict | None:
+        try:
+            r = await client.get(OVERPASS_URL, params={"data": q}, headers=headers, timeout=14.0)
+            r.raise_for_status()
+            return _elements_to_polygon(r.json().get("elements", []), lat, lon, max_dist_m=dist)
+        except Exception as e:
+            logger.warning("Overpass 탐색 실패: %s", e)
+            return None
+
+    q_loc = f'[out:json][timeout:12];way["building"](around:80,{lat},{lon});out geom;'
+
     if name:
         escaped = name.replace('"', '\\"')
-        q_name = (
-            f'[out:json][timeout:12];'
-            f'way["building"]["name"~"{escaped}"](around:500,{lat},{lon});'
-            f'out geom;'
+        q_name = f'[out:json][timeout:12];way["building"]["name"~"{escaped}"](around:500,{lat},{lon});out geom;'
+        name_poly, loc_poly = await asyncio.gather(
+            _query(q_name, 500),
+            _query(q_loc, 80),
         )
-        try:
-            r = await client.get(OVERPASS_URL, params={"data": q_name}, headers=headers, timeout=14.0)
-            r.raise_for_status()
-            els = r.json().get("elements", [])
-            poly = _elements_to_polygon(els, lat, lon, max_dist_m=500)
-            if poly:
-                logger.info("Overpass 이름 매칭 성공: %s", name)
-                return poly
-        except Exception as e:
-            logger.warning("Overpass 이름 탐색 실패: %s", e)
+        if name_poly:
+            logger.info("Overpass 이름 매칭 성공: %s", name)
+            return name_poly
+        if loc_poly:
+            return loc_poly
+        logger.info("Overpass: 건물 없음 (lat=%s, lon=%s)", lat, lon)
+        return None
 
-    # 2) 위치 기반 탐색 (80m 이내만 허용)
-    q_loc = (
-        f'[out:json][timeout:12];'
-        f'way["building"](around:80,{lat},{lon});'
-        f'out geom;'
-    )
+    return await _query(q_loc, 80)
+
+
+async def _fetch_vworld_land(
+    lat: float, lon: float, client: httpx.AsyncClient
+) -> tuple:
+    """VWORLD 필지 조회 → (pnu, current_price, std_year, land_type, vworld_polygon, price_history)"""
+    pnu = ""
+    current_price = 0
+    std_year = ""
+    land_type = ""
+    vworld_polygon = None
+    price_history: list[dict] = []
+
+    if not settings.VWORLD_API_KEY:
+        return pnu, current_price, std_year, land_type, vworld_polygon, price_history
+
+    d = _LAND_BBOX_DELTA
+    geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
+    vworld_headers = {"Referer": VWORLD_REFERER}
+
     try:
-        r = await client.get(OVERPASS_URL, params={"data": q_loc}, headers=headers, timeout=14.0)
-        r.raise_for_status()
-        els = r.json().get("elements", [])
-        poly = _elements_to_polygon(els, lat, lon, max_dist_m=80)
-        if poly:
-            return poly
-        logger.info("Overpass: 80m 이내 건물 없음 (lat=%s, lon=%s)", lat, lon)
+        data_resp = await client.get(
+            _vworld_url("/req/data"),
+            headers=vworld_headers,
+            params={
+                "service": "data",
+                "version": "2.0",
+                "request": "GetFeature",
+                "data": VWORLD_2D_LAYER,
+                "geomFilter": geom_filter,
+                "crs": "EPSG:4326",
+                "format": "json",
+                "size": 1,
+                "key": settings.VWORLD_API_KEY,
+            },
+        )
+        data_resp.raise_for_status()
+        resp_json = data_resp.json()
+        if resp_json.get("response", {}).get("status") == "OK":
+            features = (
+                resp_json.get("response", {})
+                .get("result", {})
+                .get("featureCollection", {})
+                .get("features", [])
+            )
+            if features:
+                props = features[0].get("properties", {})
+                pnu = str(props.get("pnu", "") or "")
+                current_price = int(props.get("jiga", 0) or 0)
+                std_year = str(props.get("gosi_year", "") or "")
+                jibun = str(props.get("jibun", "") or "")
+                m = re.search(r"[가-힣]+$", jibun)
+                land_type = m.group() if m else ""
+                vworld_polygon = features[0].get("geometry") or None
     except Exception as e:
-        logger.warning("Overpass 위치 탐색 실패: %s", e)
+        logger.warning("VWORLD 2D Data 실패: %s", e)
 
-    return None
+    # NED 연도별 공시지가 (PNU 필요 → 순차)
+    if pnu:
+        try:
+            attr_resp = await client.get(
+                _vworld_url("/ned/data/getIndvdLandPriceAttr"),
+                headers=vworld_headers,
+                params={
+                    "pnu": pnu,
+                    "format": "json",
+                    "numOfRows": 100,
+                    "key": settings.VWORLD_API_KEY,
+                },
+            )
+            if attr_resp.status_code == 200:
+                attr_data = attr_resp.json()
+                raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
+                if isinstance(raw_items, dict):
+                    raw_items = [raw_items]
+                price_history = sorted(
+                    [
+                        {
+                            "year": int(item.get("stdrYear", 0)),
+                            "price_per_sqm": int(item.get("pblntfPclnd", 0) or 0),
+                        }
+                        for item in raw_items
+                        if item.get("stdrYear") and item.get("pblntfPclnd")
+                    ],
+                    key=lambda x: x["year"],
+                )
+        except Exception as e:
+            logger.warning("공시지가 히스토리 조회 실패: %s", e)
 
+    return pnu, current_price, std_year, land_type, vworld_polygon, price_history
+
+
+# ── /building/land ─────────────────────────────────────────────────────────
 
 @router.get("/land")
 async def get_land_info(
@@ -372,92 +446,22 @@ async def get_land_info(
     name: str = Query(default=""),
     _: str = Depends(require_admin),
 ) -> dict:
-    import re
+    land_cache_key = f"land:{round(lat, 5)}:{round(lon, 5)}"
+    cached_land = _cache_get(land_cache_key)
+    if cached_land:
+        # name이 있고 캐시에 polygon이 없으면 Overpass 재시도 가치 있음
+        if not (name and cached_land.get("polygon") is None):
+            logger.info("Land cache hit: %s", land_cache_key)
+            return cached_land
 
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        # Step 1: OSM Overpass → 건물 footprint 폴리곤 (IP 제한 없음)
-        polygon_geojson = await _fetch_osm_building_polygon(lat, lon, client, name=name)
-
-        # Step 2: VWORLD → 공시지가 (한국 IP에서만 작동, 실패 시 graceful)
-        pnu = ""
-        current_price = 0
-        std_year = ""
-        land_type = ""
-        price_history: list[dict] = []
-        vworld_polygon: dict | None = None
-
-        if settings.VWORLD_API_KEY:
-            d = _LAND_BBOX_DELTA
-            geom_filter = f"BOX({lon - d},{lat - d},{lon + d},{lat + d})"
-            vworld_headers = {"Referer": VWORLD_REFERER}
-            try:
-                data_resp = await client.get(
-                    _vworld_url("/req/data"),
-                    headers=vworld_headers,
-                    params={
-                        "service": "data",
-                        "version": "2.0",
-                        "request": "GetFeature",
-                        "data": VWORLD_2D_LAYER,
-                        "geomFilter": geom_filter,
-                        "crs": "EPSG:4326",
-                        "format": "json",
-                        "size": 1,
-                        "key": settings.VWORLD_API_KEY,
-                    },
-                )
-                data_resp.raise_for_status()
-                resp_json = data_resp.json()
-                if resp_json.get("response", {}).get("status") == "OK":
-                    features = (
-                        resp_json.get("response", {})
-                        .get("result", {})
-                        .get("featureCollection", {})
-                        .get("features", [])
-                    )
-                    if features:
-                        props = features[0].get("properties", {})
-                        pnu = str(props.get("pnu", "") or "")
-                        current_price = int(props.get("jiga", 0) or 0)
-                        std_year = str(props.get("gosi_year", "") or "")
-                        jibun = str(props.get("jibun", "") or "")
-                        m = re.search(r"[가-힣]+$", jibun)
-                        land_type = m.group() if m else ""
-                        vworld_polygon = features[0].get("geometry") or None
-            except Exception as e:
-                logger.warning("VWORLD 2D Data 실패 (IP 차단 가능성): %s", e)
-
-            # Step 2b: NED Attr → 연도별 공시지가 히스토리
-            if pnu:
-                try:
-                    attr_resp = await client.get(
-                        _vworld_url("/ned/data/getIndvdLandPriceAttr"),
-                        headers=vworld_headers,
-                        params={
-                            "pnu": pnu,
-                            "format": "json",
-                            "numOfRows": 100,
-                            "key": settings.VWORLD_API_KEY,
-                        },
-                    )
-                    if attr_resp.status_code == 200:
-                        attr_data = attr_resp.json()
-                        raw_items = attr_data.get("indvdLandPrices", {}).get("field", [])
-                        if isinstance(raw_items, dict):
-                            raw_items = [raw_items]
-                        price_history = sorted(
-                            [
-                                {
-                                    "year": int(item.get("stdrYear", 0)),
-                                    "price_per_sqm": int(item.get("pblntfPclnd", 0) or 0),
-                                }
-                                for item in raw_items
-                                if item.get("stdrYear") and item.get("pblntfPclnd")
-                            ],
-                            key=lambda x: x["year"],
-                        )
-                except Exception as e:
-                    logger.warning("공시지가 히스토리 조회 실패: %s", e)
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        # Overpass + VWORLD 병렬 실행
+        polygon_geojson, (pnu, current_price, std_year, land_type, vworld_polygon, price_history) = (
+            await asyncio.gather(
+                _fetch_osm_building_polygon(lat, lon, client, name=name),
+                _fetch_vworld_land(lat, lon, client),
+            )
+        )
 
     if polygon_geojson is None and vworld_polygon:
         polygon_geojson = vworld_polygon
@@ -466,7 +470,7 @@ async def get_land_info(
     if polygon_geojson is None and not pnu:
         raise HTTPException(status_code=404, detail="건물 및 필지 정보를 찾을 수 없습니다")
 
-    return {
+    result = {
         "pnu": pnu,
         "current_price_per_sqm": current_price,
         "std_year": std_year,
@@ -475,3 +479,88 @@ async def get_land_info(
         "polygon": polygon_geojson,
         "price_history": price_history,
     }
+    _cache_set(land_cache_key, result)
+    return result
+
+
+# ── /building/rent ─────────────────────────────────────────────────────────
+
+@router.get("/rent")
+async def get_building_rent(
+    sigungu_cd: str = Query(..., min_length=5, max_length=5),
+    bun: str = Query(..., min_length=4, max_length=4),
+    name: str = Query(default=""),
+    _: str = Depends(require_admin),
+) -> dict:
+    if not settings.RTM_API_KEY:
+        raise HTTPException(status_code=503, detail="실거래가 API 키 미설정 (RTM_API_KEY)")
+
+    bun_int = str(int(bun))  # "0290" → "290"
+
+    # 최근 24개월
+    today = date.today()
+    months: list[str] = []
+    y, mo = today.year, today.month
+    for _ in range(24):
+        months.append(f"{y}{mo:02d}")
+        mo -= 1
+        if mo == 0:
+            mo, y = 12, y - 1
+
+    endpoint = f"{RTM_BASE}/RTMSDataSvcNrtTrade/getRTMSDataSvcNrtTrade"
+
+    async def fetch_month(ym: str, client: httpx.AsyncClient) -> list[dict]:
+        try:
+            r = await client.get(
+                endpoint,
+                params={
+                    "serviceKey": settings.BUILDING_API_KEY,
+                    "LAWD_CD": sigungu_cd,
+                    "DEAL_YMD": ym,
+                    "numOfRows": 100,
+                    "_type": "json",
+                },
+                timeout=10.0,
+            )
+            if r.status_code != 200:
+                return []
+            body = r.json().get("response", {}).get("body", {})
+            items = _items_as_list(body.get("items", {}).get("item"))
+            matched = []
+            for item in items:
+                jibun = str(item.get("지번") or "")
+                bld_name = str(item.get("건물명") or "")
+                if bun_int in jibun.split() or bun_int == jibun or (name and name in bld_name):
+                    matched.append({**item, "_ym": ym})
+            return matched
+        except Exception as e:
+            logger.warning("RTM %s 조회 실패: %s", ym, e)
+            return []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        month_results = await asyncio.gather(*[fetch_month(ym, client) for ym in months])
+
+    all_items = [item for items in month_results for item in items]
+
+    transactions = []
+    for item in all_items:
+        ym = item.get("_ym", "")
+        year = str(item.get("년") or ym[:4])
+        month_str = str(item.get("월") or ym[4:6]).zfill(2)
+        amount_raw = str(item.get("거래금액") or "").replace(",", "").strip()
+        try:
+            amount_wan = int(amount_raw)
+        except (ValueError, TypeError):
+            amount_wan = 0
+
+        transactions.append({
+            "date": f"{year}-{month_str}",
+            "amount_wan": amount_wan,
+            "floor": str(item.get("층") or ""),
+            "area_sqm": float(item.get("전용면적") or 0),
+            "building_name": str(item.get("건물명") or ""),
+            "land_use": str(item.get("용도지역") or ""),
+        })
+
+    transactions.sort(key=lambda x: x["date"], reverse=True)
+    return {"transactions": transactions}
