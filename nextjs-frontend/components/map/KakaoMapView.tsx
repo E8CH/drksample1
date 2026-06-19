@@ -6,6 +6,16 @@ import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from "react-l
 import { divIcon, geoJSON as leafletGeoJSON } from "leaflet";
 import { type BranchPinData } from "@/lib/definitions";
 
+function InvalidateOnResize() {
+  const map = useMap();
+  useEffect(() => {
+    const observer = new ResizeObserver(() => map.invalidateSize());
+    observer.observe(map.getContainer());
+    return () => observer.disconnect();
+  }, [map]);
+  return null;
+}
+
 function MapCenter({ target }: { target: { latitude: number; longitude: number } | null }) {
   const map = useMap();
   useEffect(() => {
@@ -88,6 +98,7 @@ export default function KakaoMapView({ address, target, pins, error, polygon }: 
         style={{ height: "100%", width: "100%" }}
         zoomControl={true}
       >
+        <InvalidateOnResize />
         <MapCenter target={target} />
         <PolygonFit polygon={polygon ?? null} />
         <TileLayer
