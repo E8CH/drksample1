@@ -9,13 +9,15 @@ import {
   type BuildingInfoData,
   type LandInfoData,
   type RentData,
+  type AreaRentData,
 } from "@/lib/definitions";
-import { fetchMapPins, fetchBuildingInfo, fetchLandInfo, fetchBuildingRent } from "@/components/actions/map-action";
+import { fetchMapPins, fetchBuildingInfo, fetchLandInfo, fetchBuildingRent, fetchAreaRent } from "@/components/actions/map-action";
 import SimulationForm from "./SimulationForm";
 import SimulationResultCard from "./SimulationResultCard";
 import BuildingInfoPanel from "./BuildingInfoPanel";
 import LandInfoPanel from "./LandInfoPanel";
 import RentInfoPanel from "./RentInfoPanel";
+import AreaRentPanel from "./AreaRentPanel";
 import ProposalModal from "@/components/proposal/ProposalModal";
 
 const KakaoMapView = dynamic(
@@ -59,6 +61,10 @@ export default function SimulationContainer() {
   // 실거래가
   const [rentLoading, setRentLoading] = useState(false);
   const [rentData, setRentData] = useState<RentData | null>(null);
+
+  // 지역 임대동향 (R-ONE)
+  const [areaRentLoading, setAreaRentLoading] = useState(false);
+  const [areaRentData, setAreaRentData] = useState<AreaRentData | null>(null);
 
   useEffect(() => {
     if (!mapRequest) return;
@@ -117,13 +123,21 @@ export default function SimulationContainer() {
       return { lat: lat ?? prev.lat, lon: lon ?? prev.lon, name, seq: prev.seq + 1 };
     });
 
-    // 실거래가 — sigungu_cd + bun 있을 때만
-    if (buildingInfo.sigungu_cd && buildingInfo.bun) {
-      setRentLoading(true);
-      setRentData(null);
-      fetchBuildingRent(buildingInfo.sigungu_cd, buildingInfo.bun, buildingInfo.building_name).then((data) => {
-        setRentLoading(false);
-        setRentData(data);
+    // 실거래가 + 지역 임대동향 — sigungu_cd 있을 때
+    if (buildingInfo.sigungu_cd) {
+      if (buildingInfo.bun) {
+        setRentLoading(true);
+        setRentData(null);
+        fetchBuildingRent(buildingInfo.sigungu_cd, buildingInfo.bun, buildingInfo.building_name).then((data) => {
+          setRentLoading(false);
+          setRentData(data);
+        });
+      }
+      setAreaRentLoading(true);
+      setAreaRentData(null);
+      fetchAreaRent(buildingInfo.sigungu_cd).then((data) => {
+        setAreaRentLoading(false);
+        setAreaRentData(data);
       });
     }
   }, [buildingInfo]);
@@ -178,6 +192,13 @@ export default function SimulationContainer() {
           <div className="mt-6 pt-6 border-t border-dalock-border">
             <h3 className="text-sm font-semibold text-dalock-text1 mb-3">상업용 실거래가 (최근 2년)</h3>
             <RentInfoPanel data={rentData} loading={rentLoading} />
+          </div>
+        )}
+
+        {(areaRentLoading || areaRentData) && (
+          <div className="mt-6 pt-6 border-t border-dalock-border">
+            <h3 className="text-sm font-semibold text-dalock-text1 mb-3">지역 임대동향 (한국부동산원)</h3>
+            <AreaRentPanel data={areaRentData} loading={areaRentLoading} />
           </div>
         )}
       </div>

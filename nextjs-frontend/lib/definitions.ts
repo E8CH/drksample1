@@ -141,6 +141,27 @@ export type RentData =
   | { transactions: RentTransaction[] }
   | { error: string };
 
+export type AreaRentOfficeArea = {
+  name: string;
+  office_rent_kwon_sqm: number | null;
+  office_vacancy_pct: number | null;
+};
+
+export type AreaRentMallArea = {
+  name: string;
+  mall_rent_kwon_sqm: number | null;
+};
+
+export type AreaRentData =
+  | {
+      quarter: string;
+      sido: string;
+      office_areas: AreaRentOfficeArea[];
+      mall_areas: AreaRentMallArea[];
+      has_data: boolean;
+    }
+  | { error: string };
+
 export type LandPriceEntry = {
   year: number;
   price_per_sqm: number;

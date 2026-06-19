@@ -3,6 +3,7 @@ import logging
 import math
 import re
 import time
+import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import date
 
@@ -20,6 +21,23 @@ JUSO_COORD_URL = "https://business.juso.go.kr/addrlink/addrCoordApi.do"
 BLDRGST_BASE = "http://apis.data.go.kr/1613000/BldRgstHubService"
 RTM_BASE = "http://apis.data.go.kr/1613000"
 _VWORLD_HOST = "https://api.vworld.kr"
+REB_BASE = "https://www.reb.or.kr/r-one/openapi/SttsApiTblData.do"
+
+# 한국부동산원 임대동향 STATBL_IDs (시계열, 2024Q3~)
+_REB_OFFICE_RENT = "TT249843134237374"      # 오피스 임대료 (천원/㎡)
+_REB_LARGE_MALL_RENT = "T244363134858603"   # 중대형상가 임대료
+_REB_SMALL_MALL_RENT = "T248223134698125"   # 소규모상가 임대료
+_REB_OFFICE_VACANCY = "TT244763134428698"   # 오피스 공실률 (%)
+_REB_LARGE_MALL_VACANCY = "T249633134845544" # 중대형상가 공실률
+
+# 시도코드 → 시도명 (CLS_FULLNM 접두사 매칭용)
+_SIDO_MAP: dict[str, str] = {
+    "11": "서울", "21": "부산", "22": "대구", "23": "인천",
+    "24": "광주", "25": "대전", "26": "울산", "29": "세종",
+    "31": "경기", "32": "강원", "33": "충북", "34": "충남",
+    "35": "전북", "36": "전남", "37": "경북", "38": "경남",
+    "39": "제주",
+}
 VWORLD_2D_LAYER = "LP_PA_CBND_BUBUN"
 VWORLD_REFERER = "https://frontend-production-7e58.up.railway.app/dashboard/simulation"
 OVERPASS_URL = "https://lz4.overpass-api.de/api/interpreter"
@@ -563,3 +581,137 @@ async def get_building_rent(
 
     transactions.sort(key=lambda x: x["date"], reverse=True)
     return {"transactions": transactions}
+
+
+# ── /building/area-rent ─────────────────────────────────────────────────────
+# 한국부동산원 상업용부동산 임대동향 — 상권별 임대료/공실률 (분기)
+
+async def _reb_fetch_page(
+    statbl_id: str, page: int, client: httpx.AsyncClient
+) -> list[dict]:
+    """R-ONE SttsApiTblData 단일 페이지 조회."""
+    try:
+        r = await client.get(
+            REB_BASE,
+            params={
+                "apiKey": settings.REB_KEY,
+                "STATBL_ID": statbl_id,
+                "DTACYCLE_CD": "QY",
+                "numOfRows": 5,
+                "pageNo": page,
+            },
+            headers={"User-Agent": "drksample1/1.0"},
+            timeout=8.0,
+        )
+        if r.status_code != 200:
+            return []
+        root = ET.fromstring(r.text)
+        return [{child.tag: child.text for child in row} for row in root.findall("row")]
+    except Exception as e:
+        logger.warning("REB page %d/%s error: %s", page, statbl_id, e)
+        return []
+
+
+async def _reb_fetch_latest(
+    statbl_id: str, client: httpx.AsyncClient, max_pages: int = 20
+) -> list[dict]:
+    """최신 분기 데이터만 수집. 병렬로 max_pages 페이지 요청 후 WRTTIME 필터."""
+    if not settings.REB_KEY:
+        return []
+    pages_data = await asyncio.gather(
+        *[_reb_fetch_page(statbl_id, p, client) for p in range(1, max_pages + 1)]
+    )
+    all_rows: list[dict] = [row for pg in pages_data for row in pg]
+    if not all_rows:
+        return []
+    # 가장 최신 WRTTIME만 유지
+    latest_wt = max(
+        (r.get("WRTTIME_IDTFR_ID") or "" for r in all_rows),
+        default="",
+    )
+    return [r for r in all_rows if r.get("WRTTIME_IDTFR_ID") == latest_wt]
+
+
+@router.get("/area-rent")
+async def get_area_rent(
+    sigungu_cd: str = Query(..., min_length=5, max_length=5),
+    _: str = Depends(require_admin),
+) -> dict:
+    if not settings.REB_KEY:
+        raise HTTPException(status_code=503, detail="R-ONE API 키 미설정 (REB_KEY)")
+
+    sido_code = sigungu_cd[:2]
+    sido_name = _SIDO_MAP.get(sido_code, "")
+
+    cache_key = f"area_rent:{sido_code}"
+    cached = _cache_get(cache_key)
+    if cached:
+        return cached
+
+    # 3개 테이블 병렬 패치 (각 20 페이지 × 병렬)
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        office_rent_rows, office_vacancy_rows, mall_rent_rows = await asyncio.gather(
+            _reb_fetch_latest(_REB_OFFICE_RENT, client),
+            _reb_fetch_latest(_REB_OFFICE_VACANCY, client),
+            _reb_fetch_latest(_REB_LARGE_MALL_RENT, client),
+        )
+
+    # 분기 설명 추출
+    quarter_desc = ""
+    for rows in (office_rent_rows, office_vacancy_rows, mall_rent_rows):
+        if rows:
+            quarter_desc = rows[0].get("WRTTIME_DESC", "")
+            break
+
+    def _filter(rows: list[dict], sido: str) -> list[dict]:
+        if not sido:
+            return rows
+        return [r for r in rows if (r.get("CLS_FULLNM") or "").startswith(sido + ">")]
+
+    office_rent_sido = _filter(office_rent_rows, sido_name)
+    office_vacancy_sido = _filter(office_vacancy_rows, sido_name)
+    mall_rent_sido = _filter(mall_rent_rows, sido_name)
+
+    # vacancy 조회표
+    vacancy_by_cls = {r.get("CLS_ID"): r.get("DTA_VAL") for r in office_vacancy_sido}
+
+    # 상권 목록 구성 (오피스 기준)
+    areas: list[dict] = []
+    seen_cls = set()
+    for r in office_rent_sido:
+        cls_id = r.get("CLS_ID")
+        if cls_id in seen_cls:
+            continue
+        seen_cls.add(cls_id)
+        rent_val = r.get("DTA_VAL")
+        vac_val = vacancy_by_cls.get(cls_id)
+        areas.append({
+            "name": r.get("CLS_NM", ""),
+            "office_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
+            "office_vacancy_pct": round(float(vac_val), 2) if vac_val else None,
+        })
+
+    # 상가 (중대형) 상권 별도 추가
+    mall_areas: list[dict] = []
+    seen_mall = set()
+    for r in mall_rent_sido:
+        cls_id = r.get("CLS_ID")
+        if cls_id in seen_mall:
+            continue
+        seen_mall.add(cls_id)
+        rent_val = r.get("DTA_VAL")
+        mall_areas.append({
+            "name": r.get("CLS_NM", ""),
+            "mall_rent_kwon_sqm": round(float(rent_val), 2) if rent_val else None,
+        })
+
+    result = {
+        "quarter": quarter_desc,
+        "sido": sido_name,
+        "office_areas": areas,
+        "mall_areas": mall_areas,
+        "has_data": bool(areas or mall_areas),
+    }
+    if result["has_data"]:
+        _cache_set(cache_key, result)
+    return result

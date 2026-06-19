@@ -1,6 +1,6 @@
 "use server";
 import { cookies } from "next/headers";
-import { type MapPinsData, type BuildingInfoData, type LandInfoData, type RentData } from "@/lib/definitions";
+import { type MapPinsData, type BuildingInfoData, type LandInfoData, type RentData, type AreaRentData } from "@/lib/definitions";
 
 export async function fetchMapPins(address: string): Promise<MapPinsData> {
   if (!address.trim()) return { error: "주소가 비어 있습니다" };
@@ -104,6 +104,27 @@ export async function fetchBuildingRent(sigunguCd: string, bun: string, name: st
   if (res.status === 401) return { error: "인증이 만료되었습니다" };
   if (res.status === 503) return { error: "API 키 미설정" };
   if (!res.ok) return { error: "실거래가 로드 실패" };
+  return res.json();
+}
+
+export async function fetchAreaRent(sigunguCd: string): Promise<AreaRentData> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("access_token")?.value;
+  if (!token) return { error: "인증이 필요합니다" };
+
+  const apiUrl = process.env.API_URL ?? "http://localhost:8000";
+  const url = `${apiUrl}/building/area-rent?sigungu_cd=${encodeURIComponent(sigunguCd)}`;
+
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { Cookie: `access_token=${token}` }, cache: "no-store" });
+  } catch {
+    return { error: "임대동향 서버 연결 실패" };
+  }
+
+  if (res.status === 401) return { error: "인증이 만료되었습니다" };
+  if (res.status === 503) return { error: "REB_KEY 미설정" };
+  if (!res.ok) return { error: "임대동향 로드 실패" };
   return res.json();
 }
 
