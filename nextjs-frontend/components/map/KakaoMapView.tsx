@@ -3,14 +3,26 @@
 import "leaflet/dist/leaflet.css";
 import { useEffect, useMemo, useState } from "react";
 import { MapContainer, TileLayer, Marker, Popup, GeoJSON, useMap } from "react-leaflet";
-import { divIcon } from "leaflet";
+import { divIcon, geoJSON as leafletGeoJSON } from "leaflet";
 import { type BranchPinData } from "@/lib/definitions";
 
 function MapCenter({ target }: { target: { latitude: number; longitude: number } | null }) {
   const map = useMap();
   useEffect(() => {
-    if (target) map.setView([target.latitude, target.longitude], 15);
+    if (target) map.setView([target.latitude, target.longitude], 17);
   }, [map, target]);
+  return null;
+}
+
+function PolygonFit({ polygon }: { polygon: object | null }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!polygon) return;
+    try {
+      const bounds = leafletGeoJSON(polygon as Parameters<typeof leafletGeoJSON>[0]).getBounds();
+      if (bounds.isValid()) map.fitBounds(bounds, { padding: [24, 24], maxZoom: 19 });
+    } catch {}
+  }, [map, polygon]);
   return null;
 }
 
@@ -72,11 +84,12 @@ export default function KakaoMapView({ address, target, pins, error, polygon }: 
     >
       <MapContainer
         center={center}
-        zoom={target ? 15 : 11}
+        zoom={target ? 17 : 11}
         style={{ height: "100%", width: "100%" }}
         zoomControl={true}
       >
         <MapCenter target={target} />
+        <PolygonFit polygon={polygon ?? null} />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
