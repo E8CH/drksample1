@@ -168,9 +168,9 @@ export default function SimulationContainer() {
   }
 
   return (
-    <div className="flex flex-col lg:flex-row min-h-[calc(100vh-56px)]">
+    <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-56px)]">
       {/* Left panel — input form + building info */}
-      <div className="w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-white border-r border-dalock-border p-6 overflow-y-auto">
+      <div className="w-full lg:w-[320px] xl:w-[380px] shrink-0 bg-white border-r border-dalock-border p-6 overflow-y-auto lg:h-full">
         <h2 className="text-xl font-semibold text-dalock-text1 mb-6">입지 조건 입력</h2>
         <SimulationForm onResult={handleResult} />
 
@@ -204,7 +204,7 @@ export default function SimulationContainer() {
       </div>
 
       {/* Right panel — map + result overlay */}
-      <div className="relative flex-1 bg-dalock-surface min-h-[300px]">
+      <div className="relative flex-1 bg-dalock-surface min-h-[300px] lg:h-full">
         {mapRequest === null ? (
           <div className="flex items-center justify-center h-full">
             <p className="text-dalock-text2 text-sm">주소를 입력하고 시뮬레이션을 실행하세요</p>
