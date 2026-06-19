@@ -214,21 +214,26 @@ async def get_building_info(
             title_items[0],
         )
 
-        # Step 3: 호수별 전유/공용 면적
-        expo_params = {**bld_params, "numOfRows": 500}
+        # Step 3: 호수별 전유/공용 면적 — API가 numOfRows를 무시하고 1개씩 반환하므로 페이지네이션
+        expo_params = {**bld_params, "numOfRows": 100}
+        expo_items: list = []
         try:
-            expo_resp = await client.get(
-                f"{BLDRGST_BASE}/getBrExposPubuseAreaInfo", params=expo_params
-            )
-            expo_resp.raise_for_status()
+            for page_no in range(1, 201):  # 최대 200페이지 (200×100=20,000호)
+                expo_params["pageNo"] = page_no
+                expo_resp = await client.get(
+                    f"{BLDRGST_BASE}/getBrExposPubuseAreaInfo", params=expo_params
+                )
+                expo_resp.raise_for_status()
+                expo_raw = expo_resp.json()
+                body = expo_raw.get("response", {}).get("body", {})
+                total_count = int(body.get("totalCount") or 0)
+                page_items = _items_as_list(body.get("items", {}).get("item"))
+                expo_items.extend(page_items)
+                if not page_items or len(expo_items) >= total_count:
+                    break
         except httpx.HTTPError as e:
             logger.warning("BldRgst expo API error: %s", e)
             expo_items = []
-        else:
-            expo_raw = expo_resp.json()
-            expo_items = _items_as_list(
-                expo_raw.get("response", {}).get("body", {}).get("items", {}).get("item")
-            )
 
         # 호수별 집계
         units: dict = defaultdict(
