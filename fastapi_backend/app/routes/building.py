@@ -379,6 +379,7 @@ async def get_land_info(
         std_year = ""
         land_type = ""
         price_history: list[dict] = []
+        vworld_polygon: dict | None = None
 
         if settings.VWORLD_API_KEY:
             d = _LAND_BBOX_DELTA
@@ -417,6 +418,7 @@ async def get_land_info(
                         jibun = str(props.get("jibun", "") or "")
                         m = re.search(r"[가-힣]+$", jibun)
                         land_type = m.group() if m else ""
+                        vworld_polygon = features[0].get("geometry") or None
             except Exception as e:
                 logger.warning("VWORLD 2D Data 실패 (IP 차단 가능성): %s", e)
 
@@ -451,6 +453,10 @@ async def get_land_info(
                         )
                 except Exception as e:
                     logger.warning("공시지가 히스토리 조회 실패: %s", e)
+
+    if polygon_geojson is None and vworld_polygon:
+        polygon_geojson = vworld_polygon
+        logger.info("OSM 폴리곤 없음 — VWORLD 필지 폴리곤 fallback 사용")
 
     if polygon_geojson is None and not pnu:
         raise HTTPException(status_code=404, detail="건물 및 필지 정보를 찾을 수 없습니다")
