@@ -507,14 +507,14 @@ async def get_building_rent(
         if mo == 0:
             mo, y = 12, y - 1
 
-    endpoint = f"{RTM_BASE}/RTMSDataSvcNrtTrade/getRTMSDataSvcNrtTrade"
+    endpoint = f"{RTM_BASE}/RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade"
 
     async def fetch_month(ym: str, client: httpx.AsyncClient) -> list[dict]:
         try:
             r = await client.get(
                 endpoint,
                 params={
-                    "serviceKey": settings.BUILDING_API_KEY,
+                    "serviceKey": settings.RTM_API_KEY,
                     "LAWD_CD": sigungu_cd,
                     "DEAL_YMD": ym,
                     "numOfRows": 100,
@@ -526,13 +526,12 @@ async def get_building_rent(
                 return []
             body = r.json().get("response", {}).get("body", {})
             items = _items_as_list(body.get("items", {}).get("item"))
-            matched = []
-            for item in items:
-                jibun = str(item.get("지번") or "")
-                bld_name = str(item.get("건물명") or "")
-                if bun_int in jibun.split() or bun_int == jibun or (name and name in bld_name):
-                    matched.append({**item, "_ym": ym})
-            return matched
+            # jibun은 JSON에서 마스킹 없이 제공됨 (예: "290")
+            return [
+                {**item, "_ym": ym}
+                for item in items
+                if str(item.get("jibun") or "").strip() == bun_int
+            ]
         except Exception as e:
             logger.warning("RTM %s 조회 실패: %s", ym, e)
             return []
@@ -545,21 +544,21 @@ async def get_building_rent(
     transactions = []
     for item in all_items:
         ym = item.get("_ym", "")
-        year = str(item.get("년") or ym[:4])
-        month_str = str(item.get("월") or ym[4:6]).zfill(2)
-        amount_raw = str(item.get("거래금액") or "").replace(",", "").strip()
+        year = str(item.get("dealYear") or ym[:4])
+        month_num = str(item.get("dealMonth") or ym[4:6]).zfill(2)
+        amount_raw = str(item.get("dealAmount") or "").replace(",", "").strip()
         try:
             amount_wan = int(amount_raw)
         except (ValueError, TypeError):
             amount_wan = 0
 
         transactions.append({
-            "date": f"{year}-{month_str}",
+            "date": f"{year}-{month_num}",
             "amount_wan": amount_wan,
-            "floor": str(item.get("층") or ""),
-            "area_sqm": float(item.get("전용면적") or 0),
-            "building_name": str(item.get("건물명") or ""),
-            "land_use": str(item.get("용도지역") or ""),
+            "floor": str(item.get("floor") or ""),
+            "area_sqm": float(item.get("buildingAr") or 0),
+            "building_name": str(item.get("buildingUse") or ""),
+            "land_use": str(item.get("landUse") or ""),
         })
 
     transactions.sort(key=lambda x: x["date"], reverse=True)
